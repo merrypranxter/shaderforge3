@@ -1,0 +1,7 @@
+{
+  "name": "Shader Forge 3.0 ",
+  "description": " Merry Edition!! A live GLSL shader art studio with an AI collaborator, Wolfram Alpha integration, and GitHub connectivity - and with my specific aesthetic tastes baked into it. ",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
