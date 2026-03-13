@@ -87,3 +87,12 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-biolume/20 hover:bg-biolume/40 transition-colors;
 }
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
