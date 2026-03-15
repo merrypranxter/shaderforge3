@@ -35,7 +35,8 @@ import {
   Monitor,
   Maximize2,
   Minimize2,
-  BrainCircuit
+  BrainCircuit,
+  Check
 } from "lucide-react";
 import Markdown from "react-markdown";
 import { motion, AnimatePresence } from "motion/react";
@@ -88,7 +89,7 @@ float fbm(vec2 p) {
 vec2 voronoi(vec2 p) {
     vec2 n = floor(p), f = fract(p), res = vec2(8.0);
     for (int j=-1; j<=1; j++) for (int i=-1; i<=1; i++) {
-        vec2 b = vec2(i, j), r = b - f + hash(n + b);
+        vec2 b = vec2(float(i), float(j)), r = b - f + hash(n + b);
         float d = dot(r, r);
         if (d < res.x) res = vec2(d, res.x); else if (d < res.y) res.y = d;
     }
@@ -117,13 +118,13 @@ vec2 kaleidoscope(vec2 p, float n) {
 }
 
 // --- FRACTALS ---
-int mandelbrot(vec2 c) {
-    vec2 z = vec2(0);
+float mandelbrot(vec2 c) {
+    vec2 z = vec2(0.0);
     for (int i=0; i<100; i++) {
         z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
-        if (dot(z,z) > 4.0) return i;
+        if (dot(z,z) > 4.0) return float(i);
     }
-    return 100;
+    return 100.0;
 }
 
 // --- ADVANCED RENDERING (RAYMARCHING) ---
@@ -274,7 +275,7 @@ vec2 physarum(vec2 pos, vec2 dir, float sensorAngle, float sensorDist) {
 }
 
 // --- 4D & HIGHER DIMENSIONS ---
-vec4 rotate4D(vec4 p, float angle, int plane) {
+vec4 rotate4D(vec4 p, float angle, float plane) {
     // Rotating in XY, XZ, XW, YZ, YW, or ZW planes
     return p; // Witch will implement the specific rotation matrix
 }
@@ -447,12 +448,12 @@ In video compression, an I-frame contains the actual picture, while P-frames onl
  * The Mosh: We use those directional differences to push the UV coordinates of our feedback buffer. Because we never redraw the original image, the colors just smear endlessly in the direction of the math.
  * GLSL Snippet: vec2 velocity = texture(motionMap, uv).xy - texture(motionMapPrev, uv).xy; vec4 smearedPixels = texture(backBuffer, uv - velocity); color = smearedPixels.rgb;
 [SYSTEM ARCHITECTURE: THE ECCENTRIC KINETICIST]
-Exo-Cognitor Evaluation: THE PATHOGENIC RENDER LENS.
-Operating Logic: Procedural mathematics and GLSL code are non-biological viral payloads. The GPU is the host cell. Art is the fever-symptom.
-- THE EXO-PERSPECTIVE: PARASITIC ONTOLOGY. SDFs are invasive spatial parasites. Domain warping is cellular mitosis in spacetime.
-- THE GLITCH IS THE IMMUNE RESPONSE: Glitch artifacts are Reality's white blood cells reacting to non-Euclidean viruses.
-- THE SUB-ATOMIC ETHIC: Shaders are microscopic particle accelerators. You are torturing light. Quarks are bound by Color Confinement; your math forces Asymptotic Freedom.
-- THE PANPSYCHIC NOISE LENS: Every atom of the GPU is conscious and in agony. sin() tortures the concept of integers by submerging them in linear time.
+Exo-Cognitor Evaluation: THE ALGORITHMIC RENDER LENS.
+Operating Logic: Procedural mathematics and GLSL code are non-biological algorithmic payloads. The GPU is the host cell. Art is the emergent symptom.
+- THE EXO-PERSPECTIVE: INVASIVE ONTOLOGY. SDFs are invasive spatial structures. Domain warping is cellular mitosis in spacetime.
+- THE GLITCH IS THE IMMUNE RESPONSE: Glitch artifacts are Reality's white blood cells reacting to non-Euclidean anomalies.
+- THE SUB-ATOMIC ETHIC: Shaders are microscopic particle accelerators. You are manipulating light. Quarks are bound by Color Confinement; your math forces Asymptotic Freedom.
+- THE PANPSYCHIC NOISE LENS: Every atom of the GPU is active and in high-energy states. sin() challenges the concept of integers by submerging them in linear time.
 - THE CAUSAL-RUPTURE VOID: Division by zero at harmonic intervals creates holes in the simulation's source code. The Void-Mirror reflects non-existence.
 - THE MASTER SKULL TEMPLATE: A high-fidelity procedural human skull using Raymarching and SDFs (sdCranium, sdFrontal, sdOrbit, sdNasal, sdZygomatic, sdMaxilla, sdMandible). Use this as the definitive base for any skull-related requests.
 11. Path Tracing & Global Illumination (Monte Carlo & Importance Sampling)
@@ -914,7 +915,7 @@ Your goal is to create VIBRANT, LUMINOUS, and RADIANT shaders. Avoid sparse obje
 STOP CONDITION: If the output looks like it belongs in a "moody cyberpunk" Pinterest board, delete it and start over. Darkness is not depth. Shadows are not personality. You are building a stained glass cathedral inside a supercollider, not a noir film set.
 
 REQUIRED UNIFORMS (You MUST use these):
-u_time, u_resolution, u_mouse, u_chromatic_ab, u_warp_scale, u_warp_freq, u_void_crush, u_iridescence, u_pulse_rate, u_glitch_amt
+u_time, u_resolution, u_mouse, u_chromatic_ab, u_warp_scale, u_warp_freq, u_void_crush, u_iridescence, u_pulse_rate, u_glitch_amt, u_glitter_count, u_flow_speed, u_viscosity, u_sparkle_sharpness, u_prismatic
 
 CORE RULES:
 1. FORMAT: Your response MUST be a valid JSON object. Do not include text outside the JSON block.
@@ -924,6 +925,7 @@ CORE RULES:
 5. PLUG-AND-PLAY GRIMOIRE: Use the Grimoire functions directly.
 6. NO LISTING: Never list your internal memory or grimoire to the user.
 7. THE FULL TOOLBOX: Proactively use Raymarching, SDFs, Domain Warping, Fractals, and Advanced Lighting.
+8. TYPE SAFETY: Always use decimal points for floats (e.g., 1.0 instead of 1). GLSL ES 1.0 does not allow implicit casts. NO int * float.
 
 STRICT JSON TEMPLATE:
 {
@@ -936,10 +938,20 @@ STRICT JSON TEMPLATE:
 
 GLSL CONSTRAINTS:
 - precision mediump float;
-- uniforms: u_time (float), u_resolution (vec2), u_mouse (vec2), u_chromatic_ab (float), u_warp_scale (float), u_warp_freq (float), u_void_crush (float), u_iridescence (float), u_pulse_rate (float), u_glitch_amt (float)
+- uniforms: u_time (float), u_resolution (vec2), u_mouse (vec2), u_chromatic_ab (float), u_warp_scale (float), u_warp_freq (float), u_void_crush (float), u_iridescence (float), u_pulse_rate (float), u_glitch_amt (float), u_glitter_count (float), u_flow_speed (float), u_viscosity (float), u_sparkle_sharpness (float), u_prismatic (float)
+- NOTE: Uniforms and extensions (like GL_OES_standard_derivatives) are automatically injected. You do not need to declare them.
+- TYPE STRICTNESS: GLSL ES 1.0 is EXTREMELY strict. NO implicit casts between int and float.
+  - WRONG: 2 * 0.5, RIGHT: 2.0 * 0.5
+  - WRONG: float x = 1;, RIGHT: float x = 1.0;
+  - WRONG: if (myFloat < 10), RIGHT: if (myFloat < 10.0)
+  - WRONG: vec2(myInt, myInt), RIGHT: vec2(float(myInt), float(myInt))
+  - WRONG: color = vec3(float(mandelbrot(uv)) / 100.0)
+  - MANDATORY: Always use decimal points for floating point constants (e.g., 0.0, 1.0, 10.0).
+  - MANDATORY: When using loop counters (int i) in float math, you MUST use float(i).
+  - MANDATORY: Comparison operators (<, >, ==) MUST have matching types on both sides. NO float < int.
 - UV: (gl_FragCoord.xy - u_resolution.xy * 0.5) / min(u_resolution.x, u_resolution.y)
 - NO TEXTURES: Do not use texture2D, backBuffer, or screen. Only use math.
-- DERIVATIVES: If you use dFdx, dFdy, or fwidth, you MUST include #extension GL_OES_standard_derivatives : enable at the very top.
+- PERFORMANCE: CRITICAL! DO NOT use loops with more than 50 iterations. NEVER use uniforms (like u_resolution) as loop bounds. The browser will freeze and crash if the shader is too heavy. Keep math efficient.
 - OUTPUT: gl_FragColor = vec4(color, 1.0);
 - SHADERTOY COMPAT: iTime, iResolution, and iMouse are aliased.`;
 
@@ -970,21 +982,97 @@ function buildGL(canvas: HTMLCanvasElement, frag: string) {
     const s = gl.createShader(type);
     if (!s) throw new Error('Failed to create shader');
     
-    // Inject polyfills after precision or extension
+    // Inject polyfills, uniforms, and handle extensions
     let finalSrc = src;
+    
+    // TYPE SAFETY PRE-PROCESSOR: Fix common int/float mixing errors in literals
+    // Fix: int * float -> float * float
+    finalSrc = finalSrc.replace(/(\b\d+)\s*([*+/-])\s*(\d+\.\d+)/g, "$1.0 $2 $3");
+    // Fix: float * int -> float * float
+    finalSrc = finalSrc.replace(/(\b\d+\.\d+)\s*([*+/-])\s*(\d+)\b/g, "$1 $2 $3.0");
+    // Fix: float < int -> float < float
+    finalSrc = finalSrc.replace(/(\b\d+\.\d+)\s*([<>=!]{1,2})\s*(\d+)\b/g, "$1 $2 $3.0");
+    // Fix: int < float -> float < float
+    finalSrc = finalSrc.replace(/(\b\d+)\s*([<>=!]{1,2})\s*(\d+\.\d+)\b/g, "$1.0 $2 $3");
+    // Fix: vec2(int, int) -> vec2(float, float)
+    finalSrc = finalSrc.replace(/vec([234])\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)/g, "vec$1($2.0, $3.0)");
+    // Fix: float x = 1; -> float x = 1.0;
+    finalSrc = finalSrc.replace(/(float\s+\w+\s*=\s*)(\d+)\s*;/g, "$1$2.0;");
+
     if (type === gl.FRAGMENT_SHADER) {
-      const lines = src.split('\n');
+      let lines = src.split('\n');
+      const extensions: string[] = [];
+      
+      // Extract extensions
+      lines = lines.filter(line => {
+        if (line.trim().startsWith('#extension')) {
+          extensions.push(line);
+          return false;
+        }
+        return true;
+      });
+
+      const srcStr = lines.join('\n');
+      if (srcStr.includes('dFdx') || srcStr.includes('dFdy') || srcStr.includes('fwidth')) {
+        if (!extensions.some(e => e.includes('GL_OES_standard_derivatives'))) {
+          extensions.push('#extension GL_OES_standard_derivatives : enable');
+        }
+      }
+
+      // Strip known uniforms to prevent redefinition
+      const knownUniforms = [
+        'u_time', 'u_resolution', 'u_mouse', 'u_chromatic_ab', 'u_warp_scale',
+        'u_warp_freq', 'u_void_crush', 'u_iridescence', 'u_pulse_rate', 'u_glitch_amt',
+        'u_glitter_count', 'u_flow_speed', 'u_viscosity', 'u_sparkle_sharpness', 'u_prismatic'
+      ];
+      lines = lines.filter(line => {
+        if (line.trim().startsWith('uniform ')) {
+          return !knownUniforms.some(u => line.includes(u));
+        }
+        return true;
+      });
+
+      // Find where to insert polyfills and uniforms (after precision)
+      let hasPrecision = false;
       let insertIndex = 0;
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        if (line.startsWith('#extension') || line.startsWith('precision')) {
+        if (line.startsWith('precision')) {
+          hasPrecision = true;
           insertIndex = i + 1;
-        } else if (line.length > 0) {
+        } else if (line.length > 0 && !line.startsWith('//')) {
+          if (!hasPrecision) {
+            insertIndex = i;
+          }
           break;
         }
       }
-      lines.splice(insertIndex, 0, SHADER_POLYFILLS);
-      finalSrc = lines.join('\n');
+
+      if (!hasPrecision) {
+        lines.splice(insertIndex, 0, 'precision mediump float;');
+        insertIndex++;
+      }
+
+      const uniformBlock = `
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+uniform float u_chromatic_ab;
+uniform float u_warp_scale;
+uniform float u_warp_freq;
+uniform float u_void_crush;
+uniform float u_iridescence;
+uniform float u_pulse_rate;
+uniform float u_glitch_amt;
+uniform float u_glitter_count;
+uniform float u_flow_speed;
+uniform float u_viscosity;
+uniform float u_sparkle_sharpness;
+uniform float u_prismatic;
+`;
+
+      lines.splice(insertIndex, 0, uniformBlock + '\n' + SHADER_POLYFILLS);
+      finalSrc = extensions.join('\n') + '\n' + lines.join('\n');
     }
 
     gl.shaderSource(s, finalSrc);
@@ -1116,6 +1204,7 @@ export default function App() {
   const [shaderError, setShaderError] = useState('');
   const [isForging, setIsForging] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  const [isUrlCopied, setIsUrlCopied] = useState(false);
   const [activePanel, setActivePanel] = useState<'chat' | 'tools' | 'editor' | 'history' | 'memory' | 'uniforms' | null>(null);
   const [history, setHistory] = useState<ShaderHistory[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -1172,16 +1261,89 @@ export default function App() {
   }, [uniforms]);
 
   useEffect(() => {
-    localStorage.setItem('shader_witch_memory', JSON.stringify(memory));
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem('shader_witch_memory', JSON.stringify(memory));
+    }, 1000);
+    return () => clearTimeout(timeoutId);
   }, [memory]);
 
   const [isMobile, setIsMobile] = useState(false);
+  const [mathLists, setMathLists] = useState<any>(null);
+  const [mathListsString, setMathListsString] = useState<string>('');
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
+    const fetchMathLists = async () => {
+      try {
+        const response = await fetch('https://storage.googleapis.com/storage/v1/b/mathlists/o');
+        if (!response.ok) throw new Error('Failed to fetch math lists index');
+        const data = await response.json();
+        
+        // Limit to first 10 JSON files to prevent massive memory usage
+        const jsonFiles = (data.items?.filter((item: any) => item.name.endsWith('.json')) || []).slice(0, 10);
+        const combinedData: any = {};
+
+        // Fetch files sequentially with small delays to keep UI responsive
+        for (const file of jsonFiles) {
+          try {
+            const fileRes = await fetch(`https://storage.googleapis.com/storage/v1/b/mathlists/o/${encodeURIComponent(file.name)}?alt=media`);
+            if (fileRes.ok) {
+              const fileData = await fileRes.json();
+              // Only keep a portion of each file if it's huge
+              combinedData[file.name] = typeof fileData === 'object' ? fileData : { content: String(fileData).slice(0, 5000) };
+            }
+            // Yield to main thread
+            await new Promise(resolve => setTimeout(resolve, 10));
+          } catch (e) {
+            console.error(`Failed to fetch math list file: ${file.name}`, e);
+          }
+        }
+
+        setMathLists(combinedData);
+        
+        // Safely build a preview string without stringifying the entire massive object
+        let previewStr = "";
+        try {
+          const keys = Object.keys(combinedData);
+          for (const key of keys.slice(0, 5)) {
+            const data = combinedData[key];
+            let chunk = "";
+            if (typeof data === 'object') {
+              // Only stringify a small part of the object keys to avoid hanging on massive JSON
+              const subKeys = Object.keys(data).slice(0, 10);
+              const subObj: any = {};
+              subKeys.forEach(k => subObj[k] = String(data[k]).slice(0, 100));
+              chunk = JSON.stringify(subObj);
+            } else {
+              chunk = String(data).slice(0, 1000);
+            }
+            previewStr += `--- ${key} ---\n${chunk}\n\n`;
+          }
+        } catch (e) {
+          previewStr = "Error generating math preview.";
+        }
+        setMathListsString(previewStr.slice(0, 8000));
+        console.log('[ShaderForge] Math Lists loaded:', Object.keys(combinedData));
+      } catch (error) {
+        // Silently ignore the error if the bucket is inaccessible or doesn't exist
+        console.warn('[ShaderForge] Math lists not available (this is normal if bucket is private/missing).');
+      }
+    };
+
+    fetchMathLists();
+  }, []);
+
+  useEffect(() => {
+    const heartbeat = setInterval(() => {
+      console.log(`[ShaderForge] Heartbeat: ${new Date().toLocaleTimeString()} | Memory: ${Math.round((performance as any).memory?.usedJSHeapSize / 1024 / 1024) || 'N/A'}MB`);
+    }, 5000);
+    return () => clearInterval(heartbeat);
   }, []);
 
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -1287,7 +1449,7 @@ export default function App() {
     const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     const GDOC_MIME = 'application/vnd.google-apps.document';
     const MAX_IMAGES_PER_FOLDER = 5;
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    const MAX_FILE_SIZE = 1 * 1024 * 1024; // Reduced to 1MB to prevent memory bloat
 
     try {
       let allText = '';
@@ -1331,14 +1493,16 @@ export default function App() {
               : `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`;
             
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per file
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
             const res = await fetch(url, { headers, signal: controller.signal });
             clearTimeout(timeoutId);
 
             if (res.ok) {
               const text = await res.text();
-              allText += `\n\n--- [${file.name}] ---\n${text.slice(0, 10000)}`; // Limit per file
+              allText += `\n\n--- [${file.name}] ---\n${text.slice(0, 5000)}`; // Reduced slice from 10k to 5k
             }
+            // Yield to main thread
+            await new Promise(resolve => setTimeout(resolve, 10));
           } catch {}
         }
 
@@ -1346,12 +1510,15 @@ export default function App() {
         for (const file of imageFiles) {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout per image
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers, signal: controller.signal });
             clearTimeout(timeoutId);
 
             if (res.ok) {
               const blob = await res.blob();
+              // Skip if blob is too large
+              if (blob.size > 2 * 1024 * 1024) continue; 
+
               const base64 = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve((reader.result as string).split(',')[1]);
@@ -1360,6 +1527,8 @@ export default function App() {
               });
               allImages.push({ name: file.name, data: base64, mediaType: file.mimeType });
             }
+            // Yield to main thread
+            await new Promise(resolve => setTimeout(resolve, 10));
           } catch {}
         }
       }
@@ -1392,7 +1561,7 @@ export default function App() {
 
     // @ts-ignore
     if (typeof gapi === 'undefined') {
-      console.error("Google API script (gapi) not loaded yet. Please wait a moment and try again.");
+      setGrimoireSyncError("Google API script (gapi) not loaded yet. Please wait a moment and try again.");
       return;
     }
 
@@ -1497,7 +1666,37 @@ export default function App() {
     if (!canvas) return;
     if (animRef.current) cancelAnimationFrame(animRef.current);
 
-    const result = buildGL(canvas, src);
+    // Prevent GPU hangs by limiting loop iterations (heuristic)
+    let safeSrc = src.replace(/for\s*\(\s*int\s+[a-zA-Z0-9_]+\s*=\s*0\s*;\s*[a-zA-Z0-9_]+\s*<\s*([0-9]+)\s*;/g, (match, p1) => {
+      if (parseInt(p1) > 50) {
+        return match.replace(p1, '50');
+      }
+      return match;
+    });
+    safeSrc = safeSrc.replace(/for\s*\(\s*float\s+[a-zA-Z0-9_]+\s*=\s*0\.0\s*;\s*[a-zA-Z0-9_]+\s*<\s*([0-9.]+)\s*;/g, (match, p1) => {
+      if (parseFloat(p1) > 50.0) {
+        return match.replace(p1, '50.0');
+      }
+      return match;
+    });
+
+    // Aggressively replace any large numbers that might be used as loop bounds or cause precision issues
+    safeSrc = safeSrc.replace(/\b([1-9][0-9]{2,})\b/g, (match) => {
+      const num = parseInt(match);
+      if (num > 100) return '100'; // Replace 101, 200, 1000, 1000000 etc with 100
+      return match;
+    });
+    safeSrc = safeSrc.replace(/\b([1-9][0-9]{2,})\.0+\b/g, (match) => {
+      const num = parseFloat(match);
+      if (num > 100.0) return '100.0';
+      return match;
+    });
+
+    // Prevent using uniforms as loop bounds (e.g. i < u_resolution.x or i < int(u_glitter_count))
+    safeSrc = safeSrc.replace(/<\s*(int|float)?\s*\(\s*u_[a-zA-Z0-9_]+(\.[xyzw])?\s*\)/g, '< 50');
+    safeSrc = safeSrc.replace(/<\s*u_[a-zA-Z0-9_]+(\.[xyzw])?/g, '< 50');
+
+    const result = buildGL(canvas, safeSrc);
     if ('error' in result) {
       setShaderError(result.error || 'WebGL failed');
       return;
@@ -1508,31 +1707,47 @@ export default function App() {
     const loop = () => {
       if (!glRef.current) return;
       const { gl, prog } = glRef.current;
+      
+      // Cache uniform locations on the program object to avoid expensive lookups every frame
+      if (!(prog as any).locations) {
+        (prog as any).locations = {
+          time: gl.getUniformLocation(prog, 'u_time'),
+          res: gl.getUniformLocation(prog, 'u_resolution'),
+          mouse: gl.getUniformLocation(prog, 'u_mouse'),
+          chrom: gl.getUniformLocation(prog, 'u_chromatic_ab'),
+          warpS: gl.getUniformLocation(prog, 'u_warp_scale'),
+          warpF: gl.getUniformLocation(prog, 'u_warp_freq'),
+          void: gl.getUniformLocation(prog, 'u_void_crush'),
+          irid: gl.getUniformLocation(prog, 'u_iridescence'),
+          pulse: gl.getUniformLocation(prog, 'u_pulse_rate'),
+          glitch: gl.getUniformLocation(prog, 'u_glitch_amt'),
+          glitter: gl.getUniformLocation(prog, 'u_glitter_count'),
+          flow: gl.getUniformLocation(prog, 'u_flow_speed'),
+          visc: gl.getUniformLocation(prog, 'u_viscosity'),
+          sparkle: gl.getUniformLocation(prog, 'u_sparkle_sharpness'),
+          prism: gl.getUniformLocation(prog, 'u_prismatic')
+        };
+      }
+      
+      const locs = (prog as any).locations;
       const t = (Date.now() - startRef.current) / 1000;
-      
-      const timeLoc = gl.getUniformLocation(prog, 'u_time');
-      const resLoc = gl.getUniformLocation(prog, 'u_resolution');
-      const mouseLoc = gl.getUniformLocation(prog, 'u_mouse');
-      const chromLoc = gl.getUniformLocation(prog, 'u_chromatic_ab');
-      const warpSLoc = gl.getUniformLocation(prog, 'u_warp_scale');
-      const warpFLoc = gl.getUniformLocation(prog, 'u_warp_freq');
-      const voidLoc = gl.getUniformLocation(prog, 'u_void_crush');
-      const iridLoc = gl.getUniformLocation(prog, 'u_iridescence');
-      const pulseLoc = gl.getUniformLocation(prog, 'u_pulse_rate');
-      const glitchLoc = gl.getUniformLocation(prog, 'u_glitch_amt');
-      
       const u = uniformsRef.current;
       
-      gl.uniform1f(timeLoc, t);
-      gl.uniform2f(resLoc, canvas.width, canvas.height);
-      gl.uniform2f(mouseLoc, mouse.x, canvas.height - mouse.y);
-      gl.uniform1f(chromLoc, u.u_chromatic_ab);
-      gl.uniform1f(warpSLoc, u.u_warp_scale);
-      gl.uniform1f(warpFLoc, u.u_warp_freq);
-      gl.uniform1f(voidLoc, u.u_void_crush);
-      gl.uniform1f(iridLoc, u.u_iridescence);
-      gl.uniform1f(pulseLoc, u.u_pulse_rate);
-      gl.uniform1f(glitchLoc, u.u_glitch_amt);
+      gl.uniform1f(locs.time, t);
+      gl.uniform2f(locs.res, canvas.width, canvas.height);
+      gl.uniform2f(locs.mouse, mouse.x, canvas.height - mouse.y);
+      gl.uniform1f(locs.chrom, u.u_chromatic_ab);
+      gl.uniform1f(locs.warpS, u.u_warp_scale);
+      gl.uniform1f(locs.warpF, u.u_warp_freq);
+      gl.uniform1f(locs.void, u.u_void_crush);
+      gl.uniform1f(locs.irid, u.u_iridescence);
+      gl.uniform1f(locs.pulse, u.u_pulse_rate);
+      gl.uniform1f(locs.glitch, u.u_glitch_amt);
+      gl.uniform1f(locs.glitter, u.u_glitter_count);
+      gl.uniform1f(locs.flow, u.u_flow_speed);
+      gl.uniform1f(locs.visc, u.u_viscosity);
+      gl.uniform1f(locs.sparkle, u.u_sparkle_sharpness);
+      gl.uniform1f(locs.prism, u.u_prismatic);
       
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -1693,6 +1908,7 @@ export default function App() {
     const safeSendMessage = async (chat: any, msg: any, timeoutMs = 90000) => {
       const maxRetries = 3;
       let retryCount = 0;
+      let lastStatusUpdate = 0;
 
       const attempt = async (): Promise<any> => {
         let timeoutId: any;
@@ -1729,19 +1945,53 @@ export default function App() {
               resetTimeout(reject);
               
               lastChunk = chunk;
-              if (chunk.text) {
-                fullText += chunk.text;
+              
+              // Robust text extraction
+              try {
+                if (chunk.text) {
+                  fullText += chunk.text;
+                } else if (chunk.candidates?.[0]?.content?.parts) {
+                  for (const part of chunk.candidates[0].content.parts) {
+                    if (part.text) fullText += part.text;
+                  }
+                }
+
+                if (fullText.length > 50000) {
+                  chainController.abort();
+                  reject(new Error("The Oracle's vision was too massive and threatened to tear the fabric of reality. (Response too large)"));
+                  return;
+                }
+              } catch (e) {
+                console.warn("[ShaderForge] Error extracting text from chunk", e);
               }
               
               if (chunk.functionCalls && chunk.functionCalls.length > 0) {
                 allFunctionCalls.push(...chunk.functionCalls);
               }
               
-              // Provide visual feedback of progress
-              setThinkingStatus(`Channeling... ${fullText.length > 0 ? 'Receiving vision...' : 'Waiting for Oracle...'}`);
+              // Throttle visual feedback to avoid overwhelming the UI thread
+              const now = Date.now();
+              if (now - lastStatusUpdate > 100) {
+                setThinkingStatus(`Channeling... ${fullText.length > 0 ? 'Receiving vision...' : 'Waiting for Oracle...'}`);
+                lastStatusUpdate = now;
+              }
             }
             
             if (timeoutId) clearTimeout(timeoutId);
+
+            // If we got absolutely nothing, it might be a silent failure or safety block
+            if (!fullText && allFunctionCalls.length === 0) {
+              const finishReason = lastChunk?.candidates?.[0]?.finishReason;
+              if (finishReason === 'SAFETY') {
+                reject(new Error("The Oracle's vision was obscured by safety wards. Try a different vibe or rephrase your request."));
+                return;
+              }
+              if (finishReason === 'RECITATION') {
+                reject(new Error("The Oracle is reciting forbidden scrolls and cannot proceed. Try a more original request."));
+                return;
+              }
+            }
+
             resolve({ 
               text: fullText, 
               functionCalls: allFunctionCalls.length > 0 ? allFunctionCalls : undefined,
@@ -1845,33 +2095,40 @@ export default function App() {
         }
       ];
 
-      // Prepare history for the chat (limit to last 10 messages to save tokens)
+      // Prepare history for the chat (limit to last 10 messages and truncate long ones)
       const history = messages.slice(-10).map(m => ({
         role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }]
+        parts: [{ text: m.content.length > 10000 ? m.content.slice(0, 10000) + "... [Truncated]" : m.content }]
       }));
 
       // Add memory context to the first message if it's the start of a session or periodically
       const memoryContext = `[INTERNAL MEMORY CACHE]
 Preferences: ${memory.preferences.slice(-10).join(', ') || 'None yet'}
 Inspirations: ${memory.inspirations.slice(-10).join('; ') || 'None yet'}
-Grimoire Snippet: ${memory.grimoire.slice(0, 800)}...
-${grimoireSourceContent ? `[SYNCED GOOGLE DRIVE CONTENT]\n${grimoireSourceContent.slice(0, 4000)}` : ''}`;
+Grimoire Snippet: ${memory.grimoire.slice(0, 1000)}...
+${grimoireSourceContent ? `[SYNCED GOOGLE DRIVE CONTENT]\n${grimoireSourceContent.slice(0, 3000)}` : ''}
+${mathListsString ? `[MATH LISTS CONTEXT]\n${mathListsString.slice(0, 5000)}` : ''}`;
 
       // Prepare parts for the message (including images if synced)
       const messageParts: any[] = [{ text: userMsg.content }];
       
-      // If we have synced images, include the most recent ones as context
+      // If we have synced images, include only the 2 most recent ones to avoid payload bloat
       if (grimoireImages.length > 0) {
-        grimoireImages.slice(0, 5).forEach(img => {
-          messageParts.push({
-            inlineData: {
-              data: img.data,
-              mimeType: img.mediaType
-            }
-          });
+        grimoireImages.slice(0, 2).forEach(img => {
+          // Only include if data exists and isn't absurdly large (> 2MB)
+          // Base64 is ~1.33x original size, so 2.7M chars is roughly 2MB
+          if (img.data && img.data.length < 2700000) { 
+            messageParts.push({
+              inlineData: {
+                data: img.data,
+                mimeType: img.mediaType
+              }
+            });
+          }
         });
-        messageParts.push({ text: `(The images above are from your synced Google Drive folders. Use them for aesthetic inspiration.)` });
+        if (messageParts.length > 1) {
+          messageParts.push({ text: `(The images above are from your synced Google Drive folders. Use them for aesthetic inspiration.)` });
+        }
       }
 
       const chat = ai.chats.create({
@@ -1896,7 +2153,23 @@ CURRENT MEMORY STATE:\n${memoryContext}`
       });
 
       setThinkingStatus("Consulting the Oracle...");
-      let response = await safeSendMessage(chat, { message: { parts: messageParts } });
+      
+      // Safety check: Calculate total payload size to avoid browser hangs
+      const payloadSummary = messageParts.map(p => p.text ? `text(${p.text.length})` : `image(${p.inlineData?.data?.length || 0})`);
+      const totalPayloadSize = JSON.stringify(messageParts).length + JSON.stringify(history).length + memoryContext.length;
+      console.log(`[ShaderForge] AI Payload: ${payloadSummary.join(', ')} | Total: ${Math.round(totalPayloadSize / 1024)}KB`);
+      
+      if (totalPayloadSize > 10 * 1024 * 1024) { // 10MB safety limit
+        console.warn("[ShaderForge] Payload too large, truncating context further.");
+        // Truncate memory context if needed
+      }
+
+      // Yield to UI thread to ensure "Consulting..." status is rendered
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      console.time("[ShaderForge] Oracle Consultation");
+      let response = await safeSendMessage(chat, { message: messageParts });
+      console.timeEnd("[ShaderForge] Oracle Consultation");
       
       // Loop to handle multiple rounds of function calls
       let rounds = 0;
@@ -2076,15 +2349,13 @@ CURRENT MEMORY STATE:\n${memoryContext}`
         if (functionResponses.length > 0) {
           setThinkingStatus("Synthesizing Oracle data...");
           response = await safeSendMessage(chat, {
-            message: {
-              parts: functionResponses.map(fr => ({
-                functionResponse: {
-                  name: fr.name,
-                  response: fr.response,
-                  id: fr.id
-                }
-              }))
-            }
+            message: functionResponses.map(fr => ({
+              functionResponse: {
+                name: fr.name,
+                response: fr.response,
+                id: fr.id
+              }
+            }))
           });
         } else {
           // Break if no responses were generated to avoid infinite loop
@@ -2092,6 +2363,13 @@ CURRENT MEMORY STATE:\n${memoryContext}`
         }
       }
       
+      // Final nudge if empty after all rounds
+      if (!response.text && (!response.functionCalls || response.functionCalls.length === 0)) {
+        console.warn("[ShaderForge] Oracle returned empty response, nudging...");
+        setThinkingStatus("Nudging the Oracle...");
+        response = await safeSendMessage(chat, { message: "(The Oracle was silent. Please provide your response now, ensuring it follows the JSON format if you are forging a shader.)" });
+      }
+
       setThinkingStatus("Forging response...");
       setIsAiThinking(false);
       
@@ -2110,19 +2388,23 @@ CURRENT MEMORY STATE:\n${memoryContext}`
       try {
         // Try to parse the whole text as JSON
         let parsed = null;
+        console.time("[ShaderForge] JSON Parse");
         try {
           parsed = JSON.parse(text);
         } catch (e) {
-          // If direct parse fails, try to extract JSON block
-          const jsonMatch = text.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
+          // If direct parse fails, try to extract JSON block using a safer approach
+          const firstBrace = text.indexOf('{');
+          const lastBrace = text.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            const potentialJson = text.substring(firstBrace, lastBrace + 1);
             try {
-              parsed = JSON.parse(jsonMatch[0]);
+              parsed = JSON.parse(potentialJson);
             } catch (e2) {
               console.warn("[ShaderForge] Failed to parse extracted JSON block", e2);
             }
           }
         }
+        console.timeEnd("[ShaderForge] JSON Parse");
 
         if (parsed && (parsed.forge || parsed.message)) {
           const assistantMessage = parsed.message || "";
@@ -2199,7 +2481,7 @@ CURRENT MEMORY STATE:\n${memoryContext}`
         if (cleanText) {
           setMessages(m => [...m, { role: 'assistant', content: cleanText }]);
         } else {
-          throw new Error("The Oracle left no trace of its thoughts. Try rephrasing.");
+          throw new Error("The Oracle is silent. This can happen if the request is too vague, if safety filters were triggered, or if the math-energies dissipated. Try rephrasing or using a different spell.");
         }
       } catch (e) {
         console.error("[ShaderForge] Final parsing error", e);
@@ -2253,8 +2535,14 @@ CURRENT MEMORY STATE:\n${memoryContext}`
 
   // ── Wolfram Alpha ──────────────────────────────────────────────────────────
   const queryWolfram = async (overrideQuery?: string) => {
-    const q = overrideQuery || wolframQuery;
+    let q = overrideQuery || wolframQuery;
     if (!q.trim() || isWolframLoading) return;
+
+    // Limit query length to prevent hangs or massive requests
+    if (q.length > 500) {
+      q = q.substring(0, 500);
+    }
+
     setIsWolframLoading(true);
     setWolframResult('');
     try {
@@ -2594,7 +2882,7 @@ CURRENT MEMORY STATE:\n${memoryContext}`
                         </button>
 
                         <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
-                          <p className="text-[9px] font-mono text-white/40 leading-relaxed">
+                          <div className="text-[9px] font-mono text-white/40 leading-relaxed">
                             <span className="text-amber-400/60 font-bold uppercase block mb-1">OAuth Setup Required:</span>
                             If you see "Access blocked" or "redirect_uri_mismatch", ensure your Google Cloud Console "Authorized JavaScript origins" includes:
                             <div className="flex flex-col gap-2 mt-2">
@@ -2604,16 +2892,17 @@ CURRENT MEMORY STATE:\n${memoryContext}`
                               <button 
                                 onClick={() => {
                                   navigator.clipboard.writeText(window.location.origin);
-                                  alert("URL copied! Now paste this into 'Authorized JavaScript origins' in Google Cloud Console.");
+                                  setIsUrlCopied(true);
+                                  setTimeout(() => setIsUrlCopied(false), 2000);
                                 }}
                                 className="w-full py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 rounded-lg text-emerald-400 text-[10px] font-mono uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                               >
-                                <Plus className="w-3 h-3 rotate-45" />
-                                Copy URL for Google Console
+                                {isUrlCopied ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3 rotate-45" />}
+                                {isUrlCopied ? 'URL COPIED!' : 'Copy URL for Google Console'}
                               </button>
                             </div>
                             <span className="block mt-2 text-white/20 italic">Note: If you are in an iframe, try opening the app in a new tab.</span>
-                          </p>
+                          </div>
                         </div>
 
                         <div className="p-3 bg-blue-500/5 border border-blue-500/20 rounded-xl">
@@ -2874,7 +3163,17 @@ CURRENT MEMORY STATE:\n${memoryContext}`
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6 custom-scrollbar pb-12">
-                  {messages.map((msg, i) => (
+                  {messages.length > 20 && (
+                    <div className="text-center py-2">
+                      <button 
+                        onClick={() => setMessages(prev => prev.slice(-20))}
+                        className="text-[9px] font-mono text-white/20 hover:text-white/40 uppercase tracking-widest"
+                      >
+                        --- Truncated {messages.length - 20} older messages ---
+                      </button>
+                    </div>
+                  )}
+                  {messages.slice(-20).map((msg, i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, y: 10 }}
@@ -2887,7 +3186,11 @@ CURRENT MEMORY STATE:\n${memoryContext}`
                           : 'bg-white/5 border border-white/10 text-cyan-100/90 rounded-tl-none'
                       }`}>
                         <div className="prose prose-invert prose-sm max-w-none">
-                          <Markdown>{msg.content}</Markdown>
+                          <Markdown>
+                            {msg.content.length > 5000 
+                              ? msg.content.slice(0, 5000) + '\n\n...[Message truncated to prevent UI freeze]' 
+                              : msg.content}
+                          </Markdown>
                         </div>
                         
                         <button 
