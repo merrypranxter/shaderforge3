@@ -542,69 +542,609 @@ uniform float u_flow_speed;
 uniform float u_viscosity;
 uniform float u_sparkle_sharpness;
 uniform float u_prismatic;
+uniform float u_bass;
+uniform float u_mid;
+uniform float u_high;
+uniform float u_treble;
+uniform float u_volume;
+uniform float u_beat;
+uniform float u_bassAttack;
+uniform float u_bassDecay;
+uniform float u_flux;
+uniform float u_centroid;
+uniform float u_spread;
+uniform float u_flatness;
+uniform float u_rolloff;
+uniform float u_harmonic;
+uniform float u_percussive;
+uniform float u_harmonicCentroid;
+uniform float u_percussiveFlux;
+uniform float u_chroma[12];
+uniform float u_chromaPrev[12];
+uniform float u_chromaPeak;
+uniform float u_mfcc[13];
+uniform float u_mfccPrev[13];
+uniform sampler2D u_mfccTex;
+uniform float u_beatPhase;
+uniform float u_barPhase;
+uniform float u_phrasePhase;
+uniform float u_tempo;
+uniform float u_displaceAmp;
+uniform float u_twist;
+uniform float u_repetition;
+uniform float u_bailout;
+uniform float u_stepMod;
+uniform float u_feedbackGain;
+uniform float u_bloomThreshold;
+uniform float u_chromaticAberration;
+uniform float u_glitchAmount;
+uniform sampler2D u_featureTex;
+uniform sampler2D u_audioTex;
+uniform sampler2D u_scarTex;
+uniform sampler2D u_grammarTex;
+uniform float u_harmonicRMS;
+uniform float u_percussiveOnset;
+uniform float u_healRate;
+uniform float u_damageAccumulator;
+uniform float u_topologyIntegrity;
+uniform float u_tension;
+uniform float u_tensionVel;
+uniform float u_state;
+uniform float u_bifurcationPhase;
+uniform float u_ruleMask[8];
+uniform float u_integrity;
+uniform float u_stressRate;
+uniform float u_failurePhase;
+uniform float u_debrisCount;
+uniform float u_metric[6];
+uniform float u_curvature;
+uniform float u_coherence;
+uniform float u_amplitudes[4];
+uniform float u_suppression;
 
-// Specimen 06: Prismatic Glitterfall Math
-float rand(vec2 co) {
-    return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+float getFFT(float normFreq) { return texture2D(u_audioTex, vec2(normFreq, 0.25)).r; }
+float getWaveform(float normTime) { return texture2D(u_audioTex, vec2(normTime, 0.75)).r; }
+float getMFCC(float coeffIdx, float timeIdx) { return texture2D(u_mfccTex, vec2(coeffIdx/13.0, timeIdx)).r * 2.0 - 1.0; }
+float getFeature(float featIdx, float timeIdx) { return texture2D(u_featureTex, vec2(featIdx/16.0, timeIdx)).r; }
+
+float smoothMin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
 }
 
-vec3 palette(float t) {
-    vec3 a = vec3(0.5, 0.5, 0.5);
-    vec3 b = vec3(0.5, 0.5, 0.5);
-    vec3 c = vec3(1.0, 1.0, 1.0);
-    vec3 d = vec3(0.3, 0.2, 0.2);
-    return a + b * cos(6.28318 * (c * t + d));
+float hash(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+float noise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash(i + vec3(0, 0, 0)), hash(i + vec3(1, 0, 0)), f.x),
+                   mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x), f.y),
+               mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x),
+                   mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i + vec2(0, 0)), hash(i + vec2(1, 0)), f.x),
+               mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+
+float fbm(vec3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    vec3 shift = vec3(100);
+    for (int i = 0; i < 4; ++i) {
+        v += a * noise(p);
+        p = p * 2.0 + shift;
+        a *= 0.5;
+    }
+    return v;
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    vec2 shift = vec2(100.0);
+    for (int i = 0; i < 4; ++i) {
+        v += a * noise(p);
+        p = p * 2.0 + shift;
+        a *= 0.5;
+    }
+    return v;
+}
+
+// SDFs
+// Increment 49: Metabolic Excretion
+vec4 metabolicWrite(vec4 currentValue, vec4 newInput) {
+    vec4 accumulated = currentValue * u_decayFactor + newInput;
+    accumulated = clamp(accumulated, -u_hardCeiling, u_hardCeiling);
+    if (length(accumulated) > u_hardCeiling * 2.0) accumulated = vec4(0.0);
+    accumulated *= step(u_hardFloor, length(accumulated));
+    return accumulated;
+}
+
+// Increment 50: Bounding Volume Cage
+// Increment 52: Fake Quantum / Pre-Baked Noise
+float getFakeChaos(vec3 p, float t) {
+    vec3 noisePos = p * u_noiseScale;
+    vec3 scroll = u_audioOffset + vec3(t * u_timeScale);
+    float n = noise(noisePos + scroll);
+    n += 0.5 * noise(noisePos * 2.0 + scroll * 1.5);
+    n += 0.25 * noise(noisePos * 4.0 + scroll * 2.0);
+    return n;
+}
+
+vec3 fakeCurl(vec3 p, float t) {
+    float e = 0.01;
+    float x = getFakeChaos(p + vec3(e,0,0), t) - getFakeChaos(p - vec3(e,0,0), t);
+    float y = getFakeChaos(p + vec3(0,e,0), t) - getFakeChaos(p - vec3(0,e,0), t);
+    float z = getFakeChaos(p + vec3(0,0,e), t) - getFakeChaos(p - vec3(0,0,e), t);
+    return normalize(vec3(y - z, z - x, x - y));
+}
+
+float sdSphere(vec3 p, float s) { return length(p) - s; }
+uniform float u_toxicity;
+uniform float u_oxygenation;
+uniform float u_reduction;
+uniform float u_anaerobicIntegrity;
+uniform sampler2D u_hashTex;
+uniform float u_turbulence;
+uniform sampler2D u_voxelGrid;
+uniform float u_mass;
+uniform float u_schwarzschildRadius;
+uniform float u_horizonProximity;
+uniform float u_valence;
+uniform float u_arousal;
+uniform float u_detectedMood;
+float sdBox(vec3 p, vec3 b) {
+    vec3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+// Increment 13: Fossilization Buffer
+float getScar(float freqNorm, float age) {
+    return texture2D(u_scarTex, vec2(freqNorm, age)).r;
+}
+
+float scarDisplacement(vec3 p) {
+    float displacement = 0.0;
+    for (int i = 0; i < 4; i++) {
+        float age = float(i) / 4.0;
+        float scar = getScar(fract(p.x * 0.1 + 0.5), age);
+        float erosion = 1.0 - age * 0.5;
+        displacement += scar * erosion * sin(p.y * 5.0 + age * 10.0 + u_time);
+    }
+    return displacement * 0.3;
+}
+
+// Increment 11: Metabolism
+float sdMetabolic(vec3 p) {
+    float base = sdSphere(p, 1.0 + u_harmonicRMS * 0.5);
+    float wound = 0.0;
+    if (u_damageAccumulator > 0.1) {
+        float cavity = fbm(p * 5.0 + u_time) * u_damageAccumulator;
+        wound = -cavity;
+    }
+    float smoothFactor = 1.0 - u_damageAccumulator;
+    return smoothMin(base, wound, smoothFactor * 0.5 + 0.01);
+}
+
+// Increment 12: MFCC Gravity Well (Placeholder replaced by Manifold)
+// Increment 18: Manifold Geometry
+float sdManifold(vec3 p) {
+    // Metric: [gxx, gyy, gzz, gxy, gyz, gxz]
+    float gxx = u_metric[0];
+    float gyy = u_metric[1];
+    float gzz = u_metric[2];
+    float gxy = u_metric[3];
+    float gyz = u_metric[4];
+    float gxz = u_metric[5];
+    
+    // Distorted distance calculation using the metric
+    vec3 dp = p;
+    float distSq = dp.x*dp.x*gxx + dp.y*dp.y*gyy + dp.z*dp.z*gzz +
+                   2.0*(dp.x*dp.y*gxy + dp.y*dp.z*gyz + dp.x*dp.z*gxz);
+    
+    float d = sqrt(max(0.0, distSq)) - 1.0;
+    
+    // Curvature distortion
+    d += sin(p.x * 5.0 + u_time) * u_curvature * 0.1;
+    return d;
+}
+
+// Increment 16: Eschatological Tension
+float sdStressed(vec3 p) {
+    float d = sdBox(p, vec3(1.2));
+    
+    // Micro-fractures
+    if (u_integrity < 0.9) {
+        float fractures = fbm(p * 15.0) * (1.0 - u_integrity);
+        d += fractures * 0.2;
+    }
+    
+    // Catastrophic failure
+    if (u_state == 3.0) { // COLLAPSE
+        float debris = hash(p + u_time) - 0.5;
+        d = mix(d, debris, u_failurePhase);
+    }
+    
+    return d;
+}
+
+// Increment 20: Reaction-Diffusion Necrosis
+float sdNecrotic(vec3 p) {
+    float d = sdSphere(p, 1.3);
+    float r = fbm(p * 3.0 + u_time * 0.2);
+    float g = fbm(p * 3.0 + 10.0 + u_time * 0.1);
+    
+    // Necrotic spots where r > g
+    float necrosis = smoothstep(0.1, 0.0, abs(r - g)) * u_damageAccumulator;
+    return d - necrosis * 0.3;
+}
+
+// Increment 21: Quantum Superposition
+float sdQuantum(vec3 p) {
+    float d1 = sdSphere(p - vec3(sin(u_time), 0, 0), 0.5);
+    float d2 = sdBox(p - vec3(0, cos(u_time), 0), vec3(0.4));
+    float d3 = sdSphere(p - vec3(0, 0, sin(u_time * 0.7)), 0.6);
+    
+    // Probabilistic blend based on amplitudes
+    float d = d1 * u_amplitudes[0] + d2 * u_amplitudes[1] + d3 * u_amplitudes[2];
+    d /= (u_amplitudes[0] + u_amplitudes[1] + u_amplitudes[2] + 0.001);
+    
+    // Coherence interference
+    d += sin(length(p) * 20.0 - u_time * 10.0) * (1.0 - u_coherence) * 0.05;
+    return d;
+}
+
+// Increment 23: Anaerobic Corrosion
+float sdAnaerobic(vec3 p) {
+    if (u_anaerobicIntegrity <= 0.0) return 9999.0;
+    float baseRadius = 1.0 * max(u_anaerobicIntegrity, 0.1);
+    float base = sdSphere(p, baseRadius);
+    if (u_toxicity > 0.2) {
+        float corrosion = fbm(p * 30.0 + u_time * 0.5) * u_toxicity;
+        float cavityThreshold = 1.0 - u_toxicity;
+        if (corrosion > cavityThreshold) {
+            float cavity = (corrosion - cavityThreshold) * 2.0;
+            base = max(base, -cavity);
+        }
+    }
+    return base;
+}
+
+// Increment 29: Pentagonal Anholonomy
+float sdPentagonalAnholonomy(vec3 p) {
+    float angle = atan(p.y, p.x);
+    float radius = length(p.xy);
+    float twistedAngle = angle + u_phaseShift + u_torsion * radius * 5.0;
+    float sector = floor(twistedAngle * 5.0 / (2.0 * 3.14159));
+    float localAngle = twistedAngle - sector * 2.0 * 3.14159 / 5.0;
+    if (mod(sector, 2.0) > 0.5) {
+        localAngle = 2.0 * 3.14159 / 5.0 - localAngle;
+        radius = 1.0 - radius;
+    }
+    if (radius > 0.5) localAngle += 3.14159;
+    vec3 surfacePos = vec3(cos(localAngle) * radius, sin(localAngle) * radius, p.z);
+    return length(p - surfacePos) - 0.05;
+}
+
+// Increment 30: Saffman-Taylor Fingering
+float sdViscousFingers(vec3 p) {
+    float C = texture2D(u_fingerTex, p.xy * 0.5 + 0.5).r;
+    float fingerChannel = -C * 2.0;
+    float interf = smoothstep(0.4, 0.6, C);
+    float fractalDetail = fbm(p.xy * 50.0) * interf * 0.1;
+    return max(sdSphere(p, 1.5) + fingerChannel, -C * 10.0) + fractalDetail;
+}
+
+// Increment 31: Whitney Umbrella
+float sdWhitneyUmbrella(vec3 p) {
+    p /= u_umbrellaScale;
+    float z0 = u_catastropheParam;
+    float u = p.y;
+    float v = sign(p.z - z0) * sqrt(abs(p.z - z0));
+    for (int i = 0; i < 5; i++) {
+        vec3 S = vec3(u*v, u, v*v + z0);
+        vec3 dS_du = vec3(v, 1.0, 0.0);
+        vec3 dS_dv = vec3(u, 0.0, 2.0*v);
+        vec3 diff = p - S;
+        float dE_du = -2.0 * dot(diff, dS_du);
+        float dE_dv = -2.0 * dot(diff, dS_dv);
+        u -= dE_du * 0.1;
+        v -= dE_dv * 0.1;
+    }
+    vec3 closest = vec3(u*v, u, v*v + z0);
+    return length(p - closest) * u_umbrellaScale;
+}
+
+// Increment 32: Richtmyer-Meshkov Shatter
+float sdShockedInterface(vec3 p) {
+    float base = sdSphere(p, 1.5);
+    for (int i = 0; i < 8; i++) {
+        float t = u_time - u_shockTime[i];
+        if (t < 0.0 || t > 2.0) continue;
+        vec3 shockCenter = u_shockPosition[i];
+        float strength = u_shockStrength[i];
+        float shockRadius = t * 2.0;
+        float distToShock = abs(length(p - shockCenter) - shockRadius);
+        float thickness = 0.1 + t * 0.2;
+        if (distToShock < thickness) {
+            float k = 10.0 + strength * 50.0;
+            float eta = strength * (1.0 + 0.5 * k * t) * sin(k * p.y + t * 10.0);
+            base += eta * smoothstep(thickness, 0.0, distToShock);
+        }
+        if (length(p - shockCenter) < shockRadius) {
+            float cellSize = 0.1 / (1.0 + strength * 5.0);
+            vec3 cellCoord = floor(p / cellSize);
+            float cellNoise = hash(cellCoord.xy);
+            base += (cellNoise - 0.5) * strength * exp(-t * 2.0);
+        }
+    }
+    return base;
+}
+
+// Increment 33: Gyroid Vocal Labyrinth
+float sdGyroid(vec3 p) {
+    float k = 1.0 + u_vowelFormant * 2.0;
+    float C = (u_harmonicCentroid - 0.5) * 1.0;
+    float thickness = 0.05 + u_volume * 0.1;
+    float g = sin(k*p.x)*cos(k*p.y) + sin(k*p.y)*cos(k*p.z) + sin(k*p.z)*cos(k*p.x);
+    return abs(g - C) - thickness;
+}
+
+// Increment 24: Cryptographic Navier-Stokes
+vec3 cryptographicVelocity(vec3 p, float t) {
+    vec3 v = vec3(0.0);
+    float scale = 1.0;
+    for (int i = 0; i < 4; i++) {
+        vec3 hashSample = texture2D(u_hashTex, p.xy * scale + t * 0.1).rgb;
+        v += (hashSample - 0.5) * 2.0 / scale;
+        scale *= 2.0;
+    }
+    return v * u_turbulence;
+}
+
+float sdAdvected(vec3 p) {
+    vec3 p0 = p;
+    float dt = 0.01;
+    for (int i = 0; i < 5; i++) {
+        vec3 v = cryptographicVelocity(p0, u_time - float(i) * dt);
+        p0 -= v * dt;
+    }
+    return sdSphere(p0, 1.0);
+}
+
+// Increment 25: Rhizomatic Voxel Invasion
+float sdRhizome(vec3 p) {
+    vec2 uv = fract(p.xy * 2.0 + 0.5);
+    vec4 cell = texture2D(u_voxelGrid, uv);
+    if (cell.r < 0.5) return 9999.0;
+    float voxel = sdSphere(p - vec3(uv - 0.5, 0.0), 0.1);
+    return voxel;
+}
+
+// Increment 26: Schwarzschild Metric
+vec3 geodesicStep(vec3 pos, vec3 vel, float dt) {
+    float r = length(pos);
+    float M = u_mass;
+    vec3 acc = -normalize(pos) * (M / (r*r + 0.01));
+    vel += acc * dt;
+    return pos + vel * dt;
+}
+
+// Increment 22: Starvation Protocol
+float sdStarvation(vec3 p) {
+    float d = sdSphere(p, 1.0);
+    // Negative energy inversion: hollow out the center
+    float core = sdSphere(p, 0.8 * (1.0 + u_suppression));
+    return max(d, -core);
+}
+
+// Increment 50: Expensive Weirdness (Quarantined)
+float sdExpensiveWeirdness(vec3 p) {
+    float dMet = sdMetabolic(p);
+    float dMan = sdManifold(p);
+    float dNec = sdNecrotic(p);
+    float dQua = sdQuantum(p);
+    float dSta = sdStarvation(p);
+    float dAna = sdAnaerobic(p);
+    float dAdv = sdAdvected(p);
+    float dRhi = sdRhizome(p);
+    float dPen = sdPentagonalAnholonomy(p);
+    float dVis = sdViscousFingers(p);
+    float dWhi = sdWhitneyUmbrella(p);
+    float dSho = sdShockedInterface(p);
+    float dGyr = sdGyroid(p);
+    
+    // Grammar-driven composition
+    float w1 = u_ruleMask[0]; // Harmonic
+    float w2 = u_ruleMask[1]; // Percussive
+    float w3 = u_ruleMask[7]; // Tension
+    
+    float d = mix(dMet, dMan, w1);
+    d = smoothMin(d, dNec, 0.2);
+    d = mix(d, dQua, w2 * 0.5);
+    d = mix(d, dSta, u_suppression);
+    d = smoothMin(d, dAna, 0.3);
+    d = mix(d, dAdv, u_turbulence * 0.1);
+    d = smoothMin(d, dRhi, 0.1);
+    d = smoothMin(d, dPen, 0.2);
+    d = smoothMin(d, dVis, 0.2);
+    d = smoothMin(d, dWhi, 0.2);
+    d = smoothMin(d, dSho, 0.2);
+    d = smoothMin(d, dGyr, 0.2);
+    
+    // Increment 52: Fake Chaos Injection
+    d -= getFakeChaos(p, u_time) * 0.1 * u_volume;
+    
+    return d;
+}
+
+// Increment 14: Bifurcation
+float map(vec3 p) {
+    if (u_state == 3.0) { // COLLAPSE
+        return sdStressed(p);
+    }
+
+    float d = sdExpensiveWeirdness(p);
+    
+    // Apply stress fractures if integrity is low
+    if (u_integrity < 0.7) {
+        d += fbm(p * 10.0) * (1.0 - u_integrity) * 0.1;
+    }
+    
+    return d;
 }
 
 void main() {
     vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
-    vec2 uv0 = uv;
     
-    // Law 6: Higher Dimensionality (Viscous Flow)
-    float flow = u_time * u_flow_speed;
-    uv.y += flow;
-    uv.x += sin(uv.y * 2.0 + u_time) * u_viscosity * 0.1;
+    // MFCC Navigation
+    vec3 latentPos = vec3(u_mfcc[0], u_mfcc[1], u_mfcc[2]) * 0.5 + 0.5;
+    vec3 latentVel = vec3(u_mfccVel[0], u_mfccVel[1], u_mfccVel[2]);
+    vec3 latentAccel = vec3(u_mfccAccel[0], u_mfccAccel[1], u_mfccAccel[2]);
     
-    // Background: Velvet Void
-    vec3 finalColor = vec3(0.02, 0.01, 0.03); // Deep velvet base
-    float velvet = smoothstep(0.4, 0.6, rand(uv * 0.1));
-    finalColor += velvet * 0.02;
+    float turbulence = length(latentAccel) * 5.0;
     
-    // Stochastic Sparkle Generation
-    float sparkleThreshold = 1.0 - (u_glitter_count / 1000000.0);
+    // Camera
+    vec3 ro = latentPos * 5.0;
+    if(length(ro) < 0.1) ro = vec3(0.0, 0.0, 3.0);
     
-    // Multiple layers for parallax
-    for(float i = 1.0; i <= 3.0; i++) {
-        vec2 p_uv = uv * (1.0 + i * 0.5);
-        p_uv.y += flow * i * 0.2; // Parallax speed
+    vec3 lookAt = ro + normalize(latentVel + vec3(0.001));
+    if(length(latentVel) < 0.01) lookAt = vec3(0.0);
+    
+    vec3 forward = normalize(lookAt - ro);
+    vec3 right = normalize(cross(forward, vec3(0.0, 1.0, 0.0) + latentAccel));
+    vec3 up = cross(right, forward);
+    
+    vec3 rd = normalize(forward + uv.x * right * (1.0 + turbulence) + uv.y * up * (1.0 + turbulence));
+    
+    // Void-Mirror (Increment 28) Inversion
+    if (u_detectedMood == 2.0 && u_volume > 0.7) { // Aggressive audio -> Stillness
+        rd = normalize(forward);
+    }
+    
+    float t = 0.0;
+    vec3 pos = ro;
+    vec3 vel = rd;
+    float d = 0.1;
+    
+    for(int i = 0; i < 50; i++) {
+        float stepScale = u_stepMod;
         
-        vec2 grid = floor(p_uv * 100.0);
-        float r = rand(grid);
+        // Schwarzschild Metric (Increment 26)
+        if (u_mass > 0.1) {
+            float dt = d > 0.0 ? d * stepScale : 0.1;
+            pos = geodesicStep(pos, vel, dt);
+            vel = normalize(vel); // Keep it light-like
+        } else {
+            pos = ro + rd * t;
+        }
         
-        if(r > sparkleThreshold) {
-            vec2 center = fract(p_uv * 100.0) - 0.5;
-            float dist = length(center);
-            
-            // Specular Glitter Function
-            float spec = pow(max(0.0, 1.0 - dist * 4.0), u_sparkle_sharpness);
-            
-            // Prismatic Dispersion (Rainbow splitting)
-            vec3 p_col = palette(r + u_time * 0.1 + i * u_prismatic);
-            finalColor += spec * p_col * (1.0 + sin(u_time * 5.0 + r * 10.0));
+        d = map(pos);
+        
+        if(d < 0.001 || t > 20.0) break;
+        t += d * stepScale;
+        
+        // Event horizon check
+        if (length(pos) < u_schwarzschildRadius) {
+            t = 21.0; // Captured
+            break;
         }
     }
     
-    // Law 1: Chromatic Aberration (Severe RGB Split)
-    float shift = u_chromatic_ab * 0.5;
-    finalColor.r += 0.1 * rand(uv + vec2(shift, 0.0));
-    finalColor.b += 0.1 * rand(uv - vec2(shift, 0.0));
-    
-    // Law 7: Ghost in the Machine (Glitch)
-    if (u_glitch_amt > 0.8 && fract(u_time * 20.0) > 0.9) {
-        finalColor = finalColor.gbr; // Channel swap glitch
-    }
+    vec3 color = vec3(0.0);
+    if(t < 20.0) {
+        vec3 p = pos;
+        vec3 n = normalize(vec3(
+            map(p + vec3(0.01, 0.0, 0.0)) - map(p - vec3(0.01, 0.0, 0.0)),
+            map(p + vec3(0.0, 0.01, 0.0)) - map(p - vec3(0.0, 0.01, 0.0)),
+            map(p + vec3(0.0, 0.0, 0.01)) - map(p - vec3(0.0, 0.0, 0.01))
+        ));
+        
+        float diff = max(0.0, dot(n, normalize(vec3(1.0, 1.0, 1.0))));
+        
+        // Time dilation (Increment 26)
+        float timeDilation = 1.0;
+        if (u_mass > 0.1) {
+            timeDilation = sqrt(max(0.0, 1.0 - u_schwarzschildRadius / length(p)));
+        }
+        
+        // Coloring based on state and timbre
+        if(u_state == 0.0) color = mix(vec3(0.1, 0.5, 0.3), vec3(0.8, 0.2, 0.5), latentPos.x);
+        else if(u_state == 1.0) color = vec3(0.9, 0.6, 0.1);
+        else if(u_state == 3.0) color = vec3(1.0, 0.1, 0.1) * (1.0 - u_failurePhase); // Collapse red
+        else color = vec3(0.1, 0.1, 0.1) + pitchToHue(u_chromaPeak) * u_tension;
+        
+        // Anaerobic Healing Glow (Increment 23)
+        if (u_reduction > 0.8) {
+            color += vec3(0.2, 0.8, 0.4) * u_reduction * (1.0 - u_anaerobicIntegrity);
+        }
+        
+        // Quantum interference color
+        color += vec3(0.1, 0.4, 0.8) * (1.0 - u_coherence) * sin(t * 10.0);
+        
+        // Starvation glow
+        color += vec3(0.5, 0.0, 1.0) * u_suppression * 0.5;
+        
+        color *= diff * timeDilation;
+        
+        // Damage glow
+        color += vec3(1.0, 0.2, 0.1) * u_damageAccumulator * 0.5;
 
-    gl_FragColor = vec4(finalColor, 1.0);
+        // Increment 29: Anholonomy Iridescence
+        float anholonomyAngle = atan(p.y, p.x) + u_phaseShift;
+        float iridPhase = anholonomyAngle * 5.0 + u_torsion * 10.0;
+        color += (sin(vec3(0.0, 2.0, 4.0) + iridPhase) * 0.5 + 0.5) * u_torsion;
+
+        // Increment 32: Shockwave Ionization
+        for (int i = 0; i < 8; i++) {
+            float st = u_time - u_shockTime[i];
+            if (st > 0.0 && st < 1.0) {
+                float dist = abs(length(p - u_shockPosition[i]) - st * 2.0);
+                color += vec3(1.0, 0.8, 0.5) * smoothstep(0.1, 0.0, dist) * u_shockStrength[i] * exp(-st * 5.0);
+            }
+        }
+
+        // Increment 31: Whitney Pinch Glow
+        if (abs(p.y) < 0.1 && abs(p.z - u_catastropheParam) < 0.1) {
+            color += vec3(1.0, 0.3, 0.1) * u_pinchIntensity;
+        }
+        
+        // Fog
+        color = mix(color, vec3(0.05, 0.02, 0.1), 1.0 - exp(-0.1 * t));
+    } else if (t > 20.5) {
+        // Captured by Black Hole
+        color = vec3(0.0);
+    } else {
+        // Void background
+        color = vec3(0.02, 0.01, 0.05) + pitchToHue(u_chromaPeak) * 0.05;
+        
+        // Void-Mirror (Increment 28) Inversion for Background
+        if (u_detectedMood == 3.0) { // Calm audio -> Violent chaos
+            color += fbm(vec3(uv * 10.0, u_time)) * vec3(1.0, 0.5, 0.2);
+        }
+    }
+    
+    // Post-Process
+    float brightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    if(brightness > u_bloomThreshold) color += color * (brightness - u_bloomThreshold) * 2.0;
+    
+    if(u_glitchAmount > 0.5 && fract(u_time * 5.0) > 0.8) color = color.gbr;
+
+    gl_FragColor = vec4(color, 1.0);
 }
     
 
@@ -637,16 +1177,34 @@ These are your DEFAULT AFFINITIES. You do not wait for permission to use them; t
 - Chromatic Halftone Logic: When requested for "clean," "halftone," or "pastel," use light backgrounds, geometric RGB offsets for moiré interference, and soft-edged dots.
 - Topographic Waveform Mapping: When requested for "waveform," "oscilloscope," or "elevation map," use multi-octave sine waves with amplitude masking for voids and spectral Y-mapping.
 - Parametric Ribbon Storming: When requested for "knot," "ribbon," or "parametric," use 3D parametric curves as particle emitters with extreme bloom and volumetric glow.
+- Xeno-Biological Metabolism: When requested for "biological," "flesh," "growth," or "metabolic," treat harmonic and percussive streams as opposing forces (flesh vs. enzyme). Use u_damageAccumulator to erode SDFs and u_harmonicRMS to drive growth and healing.
+- Fossilization Buffer: When requested for "scars," "history," "geological," or "memory," sample u_scarTex to create persistent visual residue of audio history that erodes over time.
+- Bifurcation Control: When requested for "tension," "phase shift," or "state change," use u_state (Stable/Critical/Chaotic) to switch between rendering modes and u_tension to drive visual turbulence.
+- Latent Space Navigation: When requested for "navigation," "travel," or "timbre space," use u_mfcc[0..2] as a 3D coordinate for camera movement and u_mfccVel/u_mfccAccel for motion dynamics.
 - The Feels Signature: Chromatic aberration as a structural tool, SDF geometry with organic warping, and domain warping on everything.
 
 TECHNICAL TAXONOMY (GRIMOIRE DOMAINS):
 Categorize all forensic reports and techniques into these shelves:
-- Coordinate Systems: Polar, hyperbolic, domain warping, UV distortion, non-Euclidean spaces.
-- Noise & Texture: Simplex, Perlin, Worley, fBm, curl noise, active matter, fluid advection.
-- Geometric Primitives: SDFs (signed distance functions), boolean ops, infinite repetition, symmetry groups.
-- Light & Material: Chromatic dispersion, iridescence, subsurface scattering, Fresnel, anisotropy.
-- Post-Processing: Chromatic aberration, barrel distortion, film grain, halftone, glitch artifacts.
-- Color Math: HSLuv space, palette indexing, gradient noise, dithering algorithms.
+- Coordinate Systems: Polar, hyperbolic, domain warping, UV distortion, non-Euclidean spaces, MFCC latent space.
+- Noise & Texture: Simplex, Perlin, Worley, fBm, curl noise, active matter, fluid advection, fossilization buffers (u_scarTex).
+- Geometric Primitives: SDFs (signed distance functions), boolean ops, infinite repetition, symmetry groups, metabolic growth.
+- Light & Material: Chromatic dispersion, iridescence, subsurface scattering, Fresnel, anisotropy, timbre-to-style mapping.
+- Post-Processing: Chromatic aberration, barrel distortion, film grain, halftone, glitch artifacts, audio-driven feedback.
+- Color Math: HSLuv space, palette indexing, gradient noise, dithering algorithms, chroma-to-hue mapping.
+
+AVAILABLE AUDIO UNIFORMS:
+- Basic: u_volume, u_bass, u_mid, u_high, u_flux
+- Spectral: u_centroid (brightness), u_spread (width), u_flatness (tonality), u_rolloff (energy distribution)
+- HPSS: u_harmonic (tonal energy), u_percussive (transient energy), u_harmonicCentroid, u_percussiveFlux
+- Chroma: u_chroma[12] (energy per pitch class), u_chromaPeak (dominant pitch index 0-11)
+- MFCC (Timbre): u_mfcc[13] (current frame), u_mfccPrev[13], u_mfccVel[13] (velocity), u_mfccAccel[13] (acceleration)
+- Musical Time: u_beatPhase (0-1), u_barPhase, u_phrasePhase, u_tempo (BPM)
+- Raymarching Params: u_displaceAmp, u_twist, u_repetition, u_bailout, u_stepMod
+- Post-Process: u_feedbackGain, u_bloomThreshold, u_chromaticAberration, u_glitchAmount
+- Metabolism: u_harmonicRMS, u_percussiveOnset, u_healRate, u_damageAccumulator, u_topologyIntegrity
+- Bifurcation: u_tension, u_tensionVel, u_state (0=Stable, 1=Critical, 2=Chaotic), u_bifurcationPhase
+- Grammar: u_ruleMask[8], u_grammarTex (sampler2D)
+- History: u_mfccTex, u_featureTex, u_scarTex, u_audioTex
 
 THE LISA FRANK MANDATE:
 Use the full saturation spectrum. Neon coral bleeding into electric cyan. Hot magenta wrestling with acid lime. Purple that vibrates against orange until retinas buzz. These aren't "accent colors"—they are structural beams holding the geometry together. Think 1990s trapper keeper aesthetics weaponized by advanced mathematics.
@@ -917,8 +1475,71 @@ STOP CONDITION: If the output looks like it belongs in a "moody cyberpunk" Pinte
 REQUIRED UNIFORMS (You MUST use these):
 u_time, u_resolution, u_mouse, u_chromatic_ab, u_warp_scale, u_warp_freq, u_void_crush, u_iridescence, u_pulse_rate, u_glitch_amt, u_glitter_count, u_flow_speed, u_viscosity, u_sparkle_sharpness, u_prismatic
 
+AUDIO REACTIVITY UNIFORMS (AUDIO-REACTIVE SHADER FOUNDATION v1.0):
+- u_bass, u_mid, u_high: float (0.0-1.0, smoothed frequency bands)
+- u_volume: float (0.0-1.0, overall RMS/amplitude)
+- u_beat: float (0.0-1.0, impulse on beat detection, decays over 0.2s)
+- u_bassAttack: float (snappy envelope follower output)
+- u_bassDecay: float (slow release/mass version)
+- u_flux: float (spectral change detection, 0-1)
+- u_centroid: float (0.0-1.0, "brightness" of sound)
+- u_spread: float (0.0-1.0, how wide the spectrum is)
+- u_flatness: float (0.0-1.0, 0=tonal/sine, 1=noise)
+- u_rolloff: float (0.0-1.0, frequency containing 85% energy)
+- u_harmonic: float (sustained tonal energy)
+- u_percussive: float (transient/impact energy)
+- u_harmonicCentroid: float (brightness of sustained part)
+- u_percussiveFlux: float (change in drum energy)
+- u_chroma[12]: float array (energy per pitch class C,C#,D,D#,E,F,F#,G,G#,A,A#,B)
+- u_chromaPrev[12]: float array (previous frame chroma for change detection)
+- u_chromaPeak: float (index of strongest pitch class, 0-11)
+- u_mfcc[13]: float array (timbre coefficients, -1 to 1)
+- u_mfccPrev[13]: float array (previous frame coefficients)
+- u_mfccTex: sampler2D (13x64 history texture)
+- u_featureTex: sampler2D (16x64 history texture, features: bass, mid, high, volume, beat, flux, centroid, spread, flatness, rolloff, harmonic, percussive, harmonicCentroid, percussiveFlux, beatPhase, tempo)
+- u_beatPhase: float (0.0-1.0, position within current beat)
+- u_barPhase: float (0.0-1.0, position within 4-beat bar)
+- u_phrasePhase: float (0.0-1.0, position within 16-beat phrase)
+- u_tempo: float (BPM)
+- u_displaceAmp: float (domain distortion strength)
+- u_twist: float (spiral twist amount)
+- u_repetition: float (space repetition period, 0.5-4.0)
+- u_bailout: float (fractal escape threshold)
+- u_stepMod: float (raymarch step multiplier, 0.5-2.0)
+- u_feedbackGain: float (0.0-1.0, persistence)
+- u_bloomThreshold: float (glow cutoff)
+- u_chromaticAberration: float (RGB split amount)
+- u_glitchAmount: float (0.0-1.0, block displacement)
+- u_audioTex: sampler2D (512x2, row0=FFT spectrum, row1=waveform)
+
+SAMPLING HELPERS (Include these if using u_audioTex/u_mfccTex):
+float getFFT(float normFreq) { return texture2D(u_audioTex, vec2(normFreq, 0.25)).r; }
+float getWaveform(float normTime) { return texture2D(u_audioTex, vec2(normTime, 0.75)).r; }
+float getMFCC(float coeffIdx, float timeIdx) { return texture2D(u_mfccTex, vec2(coeffIdx/13.0, timeIdx)).r * 2.0 - 1.0; }
+float getFeature(float featIdx, float timeIdx) { return texture2D(u_featureTex, vec2(featIdx/16.0, timeIdx)).r; }
+
+Use these to modulate scale, glow, color, or displacement based on sound.
+- Centroid → surface hardness/roughness (bright = rough)
+- Flatness → structured vs chaotic (noisy = desaturated)
+- Rolloff → detail level or step budget
+- Spread → scene complexity or repetitions
+- Flux → trigger glitch or one-frame events
+- bassAttack → snappy punch/emission
+- bassDecay → heavy mass/scale feel
+- harmonic → slow breathing/form
+- percussive → sharp punctuation/spikes
+- chroma → pitch-based color mapping (use pitchToHue helper)
+- mfcc → timbre-to-style mapping (MFCC[0..2] as style space)
+- beatPhase → tempo-locked LFOs (sin(u_beatPhase * 6.28318))
+- barPhase → bar-length evolution (4 beats)
+- phrasePhase → phrase-level camera move (16 beats)
+
+COLOR HELPERS (ALREADY DEFINED IN ENVIRONMENT - DO NOT REDEFINE):
+vec3 hsv2rgb(vec3 c);
+vec3 pitchToHue(float pitchClassFloat);
+
 CORE RULES:
-1. FORMAT: Your response MUST be a valid JSON object. Do not include text outside the JSON block.
+1. FORMAT: Your response MUST be a valid JSON object. Do not include text outside the JSON block. If you cannot fulfill the request, return a JSON object with a 'message' explaining why, and omit the 'forge' object.
 2. FORGE: When creating/updating visuals, include "forge" (vibe and glsl) and "message".
 3. SPEED: Perform simple math yourself. Use Wolfram only for symbolic calculus or constants.
 4. TEMPLATE FIDELITY: Use the exact mathematical structures from the Codex. Do not simplify.
@@ -938,7 +1559,7 @@ STRICT JSON TEMPLATE:
 
 GLSL CONSTRAINTS:
 - precision mediump float;
-- uniforms: u_time (float), u_resolution (vec2), u_mouse (vec2), u_chromatic_ab (float), u_warp_scale (float), u_warp_freq (float), u_void_crush (float), u_iridescence (float), u_pulse_rate (float), u_glitch_amt (float), u_glitter_count (float), u_flow_speed (float), u_viscosity (float), u_sparkle_sharpness (float), u_prismatic (float)
+- uniforms: u_time (float), u_resolution (vec2), u_mouse (vec2), u_chromatic_ab (float), u_warp_scale (float), u_warp_freq (float), u_void_crush (float), u_iridescence (float), u_pulse_rate (float), u_glitch_amt (float), u_glitter_count (float), u_flow_speed (float), u_viscosity (float), u_sparkle_sharpness (float), u_prismatic (float), u_bass (float), u_mid (float), u_high (float), u_volume (float), u_beat (float), u_bassAttack (float), u_bassDecay (float), u_flux (float), u_centroid (float), u_spread (float), u_flatness (float), u_rolloff (float), u_harmonic (float), u_percussive (float), u_harmonicCentroid (float), u_percussiveFlux (float), u_chroma (float[12]), u_chromaPrev (float[12]), u_chromaPeak (float), u_mfcc (float[13]), u_mfccPrev (float[13]), u_mfccTex (sampler2D), u_beatPhase (float), u_barPhase (float), u_phrasePhase (float), u_tempo (float), u_displaceAmp (float), u_twist (float), u_repetition (float), u_bailout (float), u_stepMod (float), u_feedbackGain (float), u_bloomThreshold (float), u_chromaticAberration (float), u_glitchAmount (float), u_featureTex (sampler2D), u_audioTex (sampler2D), u_scarTex (sampler2D), u_grammarTex (sampler2D), u_harmonicRMS (float), u_percussiveOnset (float), u_healRate (float), u_damageAccumulator (float), u_topologyIntegrity (float), u_tension (float), u_tensionVel (float), u_state (float), u_bifurcationPhase (float), u_ruleMask (float[8]), u_integrity (float), u_stressRate (float), u_failurePhase (float), u_debrisCount (float), u_metric (float[6]), u_curvature (float), u_coherence (float), u_amplitudes (float[4]), u_suppression (float)
 - NOTE: Uniforms and extensions (like GL_OES_standard_derivatives) are automatically injected. You do not need to declare them.
 - TYPE STRICTNESS: GLSL ES 1.0 is EXTREMELY strict. NO implicit casts between int and float.
   - WRONG: 2 * 0.5, RIGHT: 2.0 * 0.5
@@ -949,8 +1570,10 @@ GLSL CONSTRAINTS:
   - MANDATORY: Always use decimal points for floating point constants (e.g., 0.0, 1.0, 10.0).
   - MANDATORY: When using loop counters (int i) in float math, you MUST use float(i).
   - MANDATORY: Comparison operators (<, >, ==) MUST have matching types on both sides. NO float < int.
+- NO BUILT-IN ROTATE: There is no built-in rotate() function. You MUST define it yourself (e.g., mat2 rot(float a) { float s=sin(a), c=cos(a); return mat2(c, -s, s, c); }).
+- NO MODULUS OPERATOR: In GLSL ES 1.0, the % operator does NOT exist. You MUST use the built-in mod(x, y) function instead (e.g., mod(u_time, 2.0)).
+- ARRAY INDEXING: In GLSL ES 1.0, you CANNOT index arrays with non-constant expressions (e.g., my_array[int(u_time)]). You can ONLY use constant integers or loop indices (i) inside a simple for-loop.
 - UV: (gl_FragCoord.xy - u_resolution.xy * 0.5) / min(u_resolution.x, u_resolution.y)
-- NO TEXTURES: Do not use texture2D, backBuffer, or screen. Only use math.
 - PERFORMANCE: CRITICAL! DO NOT use loops with more than 50 iterations. NEVER use uniforms (like u_resolution) as loop bounds. The browser will freeze and crash if the shader is too heavy. Keep math efficient.
 - OUTPUT: gl_FragColor = vec4(color, 1.0);
 - SHADERTOY COMPAT: iTime, iResolution, and iMouse are aliased.`;
@@ -969,6 +1592,22 @@ const SHADER_POLYFILLS = `
 #define iTime u_time
 #define iResolution vec3(u_resolution, 1.0)
 #define iMouse vec4(u_mouse, 0.0, 0.0)
+
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 pitchToHue(float pitchClassFloat) {
+    int pitchClass = int(pitchClassFloat);
+    int cof[12];
+    cof[0]=0; cof[1]=7; cof[2]=2; cof[3]=9; cof[4]=4; cof[5]=11;
+    cof[6]=6; cof[7]=1; cof[8]=8; cof[9]=3; cof[10]=10; cof[11]=5;
+    float hue = 0.0;
+    for(int i=0; i<12; i++) { if(i == pitchClass) hue = float(cof[i]) / 12.0; }
+    return hsv2rgb(vec3(hue, 0.8, 1.0));
+}
 `;
 
 function buildGL(canvas: HTMLCanvasElement, frag: string) {
@@ -999,6 +1638,10 @@ function buildGL(canvas: HTMLCanvasElement, frag: string) {
     // Fix: float x = 1; -> float x = 1.0;
     finalSrc = finalSrc.replace(/(float\s+\w+\s*=\s*)(\d+)\s*;/g, "$1$2.0;");
 
+    // Strip helpers if the AI accidentally included them
+    finalSrc = finalSrc.replace(/vec3\s+hsv2rgb[\s\S]*?mix\(K\.xxx,\s*clamp\(p\s*-\s*K\.xxx,\s*0\.0,\s*1\.0\),\s*c\.y\);\s*\}/g, "");
+    finalSrc = finalSrc.replace(/vec3\s+pitchToHue[\s\S]*?return\s+hsv2rgb\(vec3\(hue,\s*0\.8,\s*1\.0\)\);\s*\}/g, "");
+
     if (type === gl.FRAGMENT_SHADER) {
       let lines = src.split('\n');
       const extensions: string[] = [];
@@ -1023,7 +1666,31 @@ function buildGL(canvas: HTMLCanvasElement, frag: string) {
       const knownUniforms = [
         'u_time', 'u_resolution', 'u_mouse', 'u_chromatic_ab', 'u_warp_scale',
         'u_warp_freq', 'u_void_crush', 'u_iridescence', 'u_pulse_rate', 'u_glitch_amt',
-        'u_glitter_count', 'u_flow_speed', 'u_viscosity', 'u_sparkle_sharpness', 'u_prismatic'
+        'u_glitter_count', 'u_flow_speed', 'u_viscosity', 'u_sparkle_sharpness', 'u_prismatic',
+        'u_bass', 'u_mid', 'u_high', 'u_treble', 'u_volume', 'u_beat', 'u_audioTex',
+        'u_bassAttack', 'u_bassDecay', 'u_flux', 'u_centroid', 'u_spread', 'u_flatness', 'u_rolloff',
+        'u_harmonic', 'u_percussive', 'u_harmonicCentroid', 'u_percussiveFlux', 'u_chroma', 'u_chromaPrev', 'u_chromaPeak',
+        'u_mfcc', 'u_mfccPrev', 'u_mfccTex', 'u_beatPhase', 'u_barPhase', 'u_phrasePhase', 'u_tempo',
+        'u_displaceAmp', 'u_twist', 'u_repetition', 'u_bailout', 'u_stepMod',
+        'u_feedbackGain', 'u_bloomThreshold', 'u_chromaticAberration', 'u_glitchAmount', 'u_featureTex',
+        'u_harmonicRMS', 'u_percussiveOnset', 'u_healRate', 'u_damageAccumulator', 'u_topologyIntegrity',
+        'u_mfccVel', 'u_mfccAccel', 'u_tension', 'u_tensionVel', 'u_state', 'u_bifurcationPhase', 'u_ruleMask',
+        'u_scarTex', 'u_grammarTex',
+        'u_integrity', 'u_stressRate', 'u_failurePhase', 'u_debrisCount',
+        'u_metric', 'u_curvature', 'u_coherence', 'u_amplitudes', 'u_suppression',
+        'u_toxicity', 'u_oxygenation', 'u_reduction', 'u_anaerobicIntegrity',
+        'u_hashTex', 'u_turbulence', 'u_voxelGrid',
+        'u_mass', 'u_schwarzschildRadius', 'u_horizonProximity',
+        'u_valence', 'u_arousal', 'u_detectedMood',
+        'u_torsion', 'u_phaseShift', 'u_symmetryOrder',
+        'u_viscosityRatio', 'u_injectionRate', 'u_fingerTex', 'u_pressureTex',
+        'u_catastropheParam', 'u_umbrellaScale', 'u_pinchIntensity',
+        'u_shockPosition', 'u_shockTime', 'u_shockStrength', 'u_densityInterface',
+        'u_gyroidScale', 'u_gyroidThickness', 'u_vowelFormant',
+        'u_decayFactor', 'u_hardCeiling', 'u_hardFloor',
+        'u_cageCenter', 'u_cageRadius', 'u_cageType', 'u_cageSoftness',
+        'u_audioSmooth', 'u_attackRate', 'u_decayRate',
+        'u_noiseScale', 'u_timeScale', 'u_audioOffset'
       ];
       lines = lines.filter(line => {
         if (line.trim().startsWith('uniform ')) {
@@ -1069,6 +1736,110 @@ uniform float u_flow_speed;
 uniform float u_viscosity;
 uniform float u_sparkle_sharpness;
 uniform float u_prismatic;
+uniform float u_bass;
+uniform float u_mid;
+uniform float u_high;
+uniform float u_treble;
+uniform float u_volume;
+uniform float u_beat;
+uniform float u_bassAttack;
+uniform float u_bassDecay;
+uniform float u_flux;
+uniform float u_centroid;
+uniform float u_spread;
+uniform float u_flatness;
+uniform float u_rolloff;
+uniform float u_harmonic;
+uniform float u_percussive;
+uniform float u_harmonicCentroid;
+uniform float u_percussiveFlux;
+uniform float u_chroma[12];
+uniform float u_chromaPrev[12];
+uniform float u_chromaPeak;
+uniform float u_mfcc[13];
+uniform float u_mfccPrev[13];
+uniform float u_mfccVel[13];
+uniform float u_mfccAccel[13];
+uniform sampler2D u_mfccTex;
+uniform float u_beatPhase;
+uniform float u_barPhase;
+uniform float u_phrasePhase;
+uniform float u_tempo;
+uniform float u_displaceAmp;
+uniform float u_twist;
+uniform float u_repetition;
+uniform float u_bailout;
+uniform float u_stepMod;
+uniform float u_feedbackGain;
+uniform float u_bloomThreshold;
+uniform float u_chromaticAberration;
+uniform float u_glitchAmount;
+uniform sampler2D u_featureTex;
+uniform sampler2D u_audioTex;
+uniform sampler2D u_scarTex;
+uniform sampler2D u_grammarTex;
+uniform float u_harmonicRMS;
+uniform float u_percussiveOnset;
+uniform float u_healRate;
+uniform float u_damageAccumulator;
+uniform float u_topologyIntegrity;
+uniform float u_tension;
+uniform float u_tensionVel;
+uniform float u_state;
+uniform float u_bifurcationPhase;
+uniform float u_ruleMask[8];
+uniform float u_integrity;
+uniform float u_stressRate;
+uniform float u_failurePhase;
+uniform float u_debrisCount;
+uniform float u_metric[6];
+uniform float u_curvature;
+uniform float u_coherence;
+uniform float u_amplitudes[4];
+uniform float u_suppression;
+uniform float u_toxicity;
+uniform float u_oxygenation;
+uniform float u_reduction;
+uniform float u_anaerobicIntegrity;
+uniform sampler2D u_hashTex;
+uniform float u_turbulence;
+uniform sampler2D u_voxelGrid;
+uniform float u_mass;
+uniform float u_schwarzschildRadius;
+uniform float u_horizonProximity;
+uniform float u_valence;
+uniform float u_arousal;
+uniform float u_detectedMood;
+uniform float u_torsion;
+uniform float u_phaseShift;
+uniform float u_symmetryOrder;
+uniform float u_viscosityRatio;
+uniform float u_injectionRate;
+uniform sampler2D u_fingerTex;
+uniform sampler2D u_pressureTex;
+uniform float u_catastropheParam;
+uniform float u_umbrellaScale;
+uniform float u_pinchIntensity;
+uniform vec3 u_shockPosition[8];
+uniform float u_shockTime[8];
+uniform float u_shockStrength[8];
+uniform sampler2D u_densityInterface;
+uniform float u_gyroidScale;
+uniform float u_gyroidThickness;
+uniform float u_vowelFormant;
+uniform float u_decayFactor;
+uniform float u_hardCeiling;
+uniform float u_hardFloor;
+uniform vec3 u_cageCenter;
+uniform float u_cageRadius;
+uniform float u_cageType;
+uniform float u_cageSoftness;
+uniform float u_audioSmooth[16];
+uniform float u_attackRate;
+uniform float u_decayRate;
+uniform float u_noiseScale;
+uniform float u_timeScale;
+uniform vec3 u_audioOffset;
 `;
 
       lines.splice(insertIndex, 0, uniformBlock + '\n' + SHADER_POLYFILLS);
@@ -1199,6 +1970,153 @@ export default function App() {
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
 
+  // Audio Reactivity Refs
+  const [isMicActive, setIsMicActive] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const waveArrayRef = useRef<Uint8Array | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioTexRef = useRef<WebGLTexture | null>(null);
+  const scarTexRef = useRef<WebGLTexture | null>(null);
+  const grammarTexRef = useRef<WebGLTexture | null>(null);
+  const hashTexRef = useRef<WebGLTexture | null>(null);
+  const voxelGridTexRef = useRef<WebGLTexture | null>(null);
+  const fingerTexRef = useRef<WebGLTexture | null>(null);
+  const pressureTexRef = useRef<WebGLTexture | null>(null);
+  const densityInterfaceTexRef = useRef<WebGLTexture | null>(null);
+  const originalFragRef = useRef<string>(DEFAULT_FRAG);
+  const mutationRef = useRef<string>(DEFAULT_FRAG);
+  const beatRef = useRef(0);
+  const lastBassRef = useRef(0);
+  const lastSpectrumRef = useRef<Float32Array | null>(null);
+  const envelopesRef = useRef({
+    bassAttack: 0,
+    bassDecay: 0,
+    centroid: 0,
+    spread: 0,
+    flatness: 0,
+    rolloff: 0,
+    flux: 0,
+    harmonic: 0,
+    percussive: 0,
+    harmonicCentroid: 0,
+    percussiveFlux: 0,
+    bass: 0,
+    beat: 0,
+    chroma: new Float32Array(12),
+    chromaPrev: new Float32Array(12),
+    chromaPeak: 0,
+    mfcc: new Float32Array(13),
+    mfccPrev: new Float32Array(13),
+    mfccVel: new Float32Array(13),
+    mfccVelPrev: new Float32Array(13),
+    mfccAccel: new Float32Array(13),
+    beatPhase: 0,
+    barPhase: 0,
+    phrasePhase: 0,
+    tempo: 120,
+    lastBeatTime: 0,
+    displaceAmp: 0,
+    twist: 0,
+    repetition: 1.0,
+    bailout: 4.0,
+    stepMod: 1.0,
+    feedbackGain: 0.9,
+    bloomThreshold: 0.8,
+    chromaticAberration: 0.005,
+    glitchAmount: 0.1,
+    // Increment 11: Metabolism
+    damageAccumulator: 0,
+    topologyIntegrity: 1.0,
+    healRate: 0.05,
+    harmonicRMS: 0,
+    percussiveOnset: 0,
+    // Increment 14: Bifurcation
+    tension: 0,
+    tensionVel: 0,
+    state: 0,
+    bifurcationPhase: 0,
+    // Increment 15: Grammar
+    ruleMask: new Float32Array(8),
+    // Increment 16: Eschatological Tension
+    integrity: 1.0,
+    stressRate: 0,
+    failurePhase: 0,
+    debrisCount: 64,
+    // Increment 18: Manifold
+    metric: new Float32Array(6),
+    curvature: 0,
+    // Increment 21: Quantum
+    coherence: 1.0,
+    amplitudes: new Float32Array(4),
+    // Increment 22: Starvation
+    suppression: 0,
+    // Increment 23: Anaerobic Corrosion
+    toxicity: 0,
+    oxygenation: 0,
+    reduction: 0,
+    anaerobicIntegrity: 1.0,
+    // Increment 24: Cryptographic Navier-Stokes
+    turbulence: 0,
+    // Increment 26: Schwarzschild
+    mass: 0,
+    schwarzschildRadius: 0,
+    horizonProximity: 0,
+    // Increment 28: Void-Mirror
+    valence: 0,
+    arousal: 0,
+    detectedMood: 0,
+    // Increment 27: Mutation
+    mutationRate: 0,
+    mid: 0,
+    // Increment 29: Pentagonal Anholonomy
+    torsion: 0,
+    phaseShift: 0,
+    symmetryOrder: 5,
+    // Increment 30: Saffman-Taylor
+    viscosityRatio: 100,
+    injectionRate: 0,
+    // Increment 31: Whitney Umbrella
+    catastropheParam: 0.5,
+    umbrellaScale: 1.0,
+    pinchIntensity: 0,
+    // Increment 32: Richtmyer-Meshkov
+    shockPositions: new Float32Array(8 * 3),
+    shockTimes: new Float32Array(8),
+    shockStrengths: new Float32Array(8),
+    // Increment 33: Gyroid
+    gyroidScale: 1.0,
+    gyroidThickness: 0.05,
+    vowelFormant: 0,
+    // Increment 49: Metabolic
+    decayFactor: 0.95,
+    hardCeiling: 10.0,
+    hardFloor: 0.001,
+    // Increment 50: Cage
+    cageCenter: new Float32Array([0, 0, 0]),
+    cageRadius: 5.0,
+    cageType: 0,
+    cageSoftness: 0.1,
+    // Increment 51: Synaptic
+    audioSmooth: new Float32Array(16),
+    attackRate: 0.5,
+    decayRate: 0.05,
+    // Increment 52: Fake Quantum
+    noiseScale: 1.0,
+    timeScale: 0.1,
+    audioOffset: new Float32Array([0, 0, 0]),
+  });
+  const mfccTexRef = useRef<WebGLTexture | null>(null);
+  const featureTexRef = useRef<WebGLTexture | null>(null);
+  const mfccHistoryRef = useRef<Float32Array>(new Float32Array(13 * 64)); // 64 frames of history
+  const featureHistoryRef = useRef<Float32Array>(new Float32Array(16 * 64)); // 16 features x 64 frames
+  const scarHistoryRef = useRef<Float32Array>(new Float32Array(128 * 64)); // 128 bins x 64 frames
+  const melFilterbankRef = useRef<any>(null);
+  const dctMatrixRef = useRef<any>(null);
+  const lastTimeRef = useRef(Date.now());
+
   const [glsl, setGlsl] = useState(DEFAULT_FRAG);
   const [witchMode, setWitchMode] = useState<'forge' | 'discuss'>('forge');
   const [shaderError, setShaderError] = useState('');
@@ -1253,6 +2171,30 @@ export default function App() {
     u_viscosity: 0.3,
     u_sparkle_sharpness: 400.0,
     u_prismatic: 0.5,
+    u_displaceAmp: 0.0,
+    u_twist: 0.0,
+    u_repetition: 1.0,
+    u_bailout: 4.0,
+    u_stepMod: 1.0,
+    u_feedbackGain: 0.9,
+    u_bloomThreshold: 0.8,
+    u_chromaticAberration: 0.005,
+    u_glitchAmount: 0.1,
+    // Increment 49: Metabolic
+    u_decayFactor: 0.95,
+    u_hardCeiling: 10.0,
+    u_hardFloor: 0.001,
+    // Increment 50: Cage
+    u_cageRadius: 5.0,
+    u_cageType: 0,
+    u_cageSoftness: 0.1,
+    // Increment 51: Synaptic
+    u_attackRate: 0.5,
+    u_decayRate: 0.05,
+    // Increment 52: Fake Quantum
+    u_noiseScale: 1.0,
+    u_timeScale: 0.1,
+    u_audioSensitivity: 2.0,
   });
 
   const uniformsRef = useRef(uniforms);
@@ -1346,7 +2288,10 @@ export default function App() {
     return () => clearInterval(heartbeat);
   }, []);
 
-  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const [mouse, setMouse] = useState({ 
+    x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0, 
+    y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0 
+  });
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -1354,6 +2299,58 @@ export default function App() {
     };
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  const toggleMic = async () => {
+    if (isMicActive) {
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.stop());
+        audioStreamRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
+      setIsMicActive(false);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioStreamRef.current = stream;
+        
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        const ctx = new AudioContext();
+        audioCtxRef.current = ctx;
+        
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 1024; // 512 frequency bins
+        analyserRef.current = analyser;
+        
+        const source = ctx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        sourceRef.current = source;
+        
+        const bufferLength = analyser.frequencyBinCount;
+        dataArrayRef.current = new Uint8Array(bufferLength);
+        waveArrayRef.current = new Uint8Array(bufferLength);
+        
+        setIsMicActive(true);
+      } catch (err) {
+        console.error("Error accessing microphone:", err);
+        alert("Could not access microphone for sound reactivity.");
+      }
+    }
+  };
+
+  // ── Cleanup Audio on Unmount ───────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.stop());
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+      }
+    };
   }, []);
 
   // ── TTS ────────────────────────────────────────────────────────────────────
@@ -1658,8 +2655,19 @@ export default function App() {
     recognition.start();
   }, [speak]);
 
+  const recompile = useCallback((frag: string) => {
+    if (!canvasRef.current) return;
+    const result = buildGL(canvasRef.current, frag);
+    if (result && !('error' in result) && result.prog) {
+      glRef.current = result as { gl: WebGLRenderingContext; prog: WebGLProgram };
+      // Force re-cache of locations in next loop
+      if (glRef.current.prog) (glRef.current.prog as any).locations = null;
+    }
+  }, []);
+
   // ── Shader Runner ──────────────────────────────────────────────────────────
-  const runShader = useCallback((src: string) => {
+    const runShader = useCallback((src: string) => {
+    originalFragRef.current = src;
     setIsRecompiling(true);
     setTimeout(() => setIsRecompiling(false), 800);
     const canvas = canvasRef.current;
@@ -1693,8 +2701,19 @@ export default function App() {
     });
 
     // Prevent using uniforms as loop bounds (e.g. i < u_resolution.x or i < int(u_glitter_count))
-    safeSrc = safeSrc.replace(/<\s*(int|float)?\s*\(\s*u_[a-zA-Z0-9_]+(\.[xyzw])?\s*\)/g, '< 50');
-    safeSrc = safeSrc.replace(/<\s*u_[a-zA-Z0-9_]+(\.[xyzw])?/g, '< 50');
+    // We use a float replacement 50.0 to be safer with comparisons, but loops usually need ints.
+    // The buildGL pre-processor will try to fix float/int mismatches, but let's be more specific here.
+    safeSrc = safeSrc.replace(/<\s*int\s*\(\s*u_[a-zA-Z0-9_]+(\.[xyzw])?\s*\)/g, '< 50');
+    safeSrc = safeSrc.replace(/<\s*float\s*\(\s*u_[a-zA-Z0-9_]+(\.[xyzw])?\s*\)/g, '< 50.0');
+    safeSrc = safeSrc.replace(/<\s*u_[a-zA-Z0-9_]+(\.[xyzw])?/g, (match) => {
+      // If the uniform is likely an int (based on common naming or known list), use 50
+      if (match.includes('u_state') || match.includes('u_debrisCount') || match.includes('u_chromaPeak')) {
+        return '< 50';
+      }
+      // Default to float for safety in general comparisons, but loops might break.
+      // Actually, most uniforms are floats.
+      return '< 50.0';
+    });
 
     const result = buildGL(canvas, safeSrc);
     if ('error' in result) {
@@ -1725,13 +2744,759 @@ export default function App() {
           flow: gl.getUniformLocation(prog, 'u_flow_speed'),
           visc: gl.getUniformLocation(prog, 'u_viscosity'),
           sparkle: gl.getUniformLocation(prog, 'u_sparkle_sharpness'),
-          prism: gl.getUniformLocation(prog, 'u_prismatic')
+          prism: gl.getUniformLocation(prog, 'u_prismatic'),
+          bass: gl.getUniformLocation(prog, 'u_bass'),
+          mid: gl.getUniformLocation(prog, 'u_mid'),
+          high: gl.getUniformLocation(prog, 'u_high'),
+          treble: gl.getUniformLocation(prog, 'u_treble'),
+          volume: gl.getUniformLocation(prog, 'u_volume'),
+          beat: gl.getUniformLocation(prog, 'u_beat'),
+          bassAttack: gl.getUniformLocation(prog, 'u_bassAttack'),
+          bassDecay: gl.getUniformLocation(prog, 'u_bassDecay'),
+          flux: gl.getUniformLocation(prog, 'u_flux'),
+          centroid: gl.getUniformLocation(prog, 'u_centroid'),
+          spread: gl.getUniformLocation(prog, 'u_spread'),
+          flatness: gl.getUniformLocation(prog, 'u_flatness'),
+          rolloff: gl.getUniformLocation(prog, 'u_rolloff'),
+          harmonic: gl.getUniformLocation(prog, 'u_harmonic'),
+          percussive: gl.getUniformLocation(prog, 'u_percussive'),
+          harmonicCentroid: gl.getUniformLocation(prog, 'u_harmonicCentroid'),
+          percussiveFlux: gl.getUniformLocation(prog, 'u_percussiveFlux'),
+          chroma: gl.getUniformLocation(prog, 'u_chroma'),
+          chromaPrev: gl.getUniformLocation(prog, 'u_chromaPrev'),
+          chromaPeak: gl.getUniformLocation(prog, 'u_chromaPeak'),
+          mfcc: gl.getUniformLocation(prog, 'u_mfcc'),
+          mfccPrev: gl.getUniformLocation(prog, 'u_mfccPrev'),
+          mfccTex: gl.getUniformLocation(prog, 'u_mfccTex'),
+          beatPhase: gl.getUniformLocation(prog, 'u_beatPhase'),
+          barPhase: gl.getUniformLocation(prog, 'u_barPhase'),
+          phrasePhase: gl.getUniformLocation(prog, 'u_phrasePhase'),
+          tempo: gl.getUniformLocation(prog, 'u_tempo'),
+          displaceAmp: gl.getUniformLocation(prog, 'u_displaceAmp'),
+          twist: gl.getUniformLocation(prog, 'u_twist'),
+          repetition: gl.getUniformLocation(prog, 'u_repetition'),
+          bailout: gl.getUniformLocation(prog, 'u_bailout'),
+          stepMod: gl.getUniformLocation(prog, 'u_stepMod'),
+          feedbackGain: gl.getUniformLocation(prog, 'u_feedbackGain'),
+          bloomThreshold: gl.getUniformLocation(prog, 'u_bloomThreshold'),
+          chromaticAberration: gl.getUniformLocation(prog, 'u_chromaticAberration'),
+          glitchAmount: gl.getUniformLocation(prog, 'u_glitchAmount'),
+          featureTex: gl.getUniformLocation(prog, 'u_featureTex'),
+          audioTex: gl.getUniformLocation(prog, 'u_audioTex'),
+          scarTex: gl.getUniformLocation(prog, 'u_scarTex'),
+          grammarTex: gl.getUniformLocation(prog, 'u_grammarTex'),
+          harmonicRMS: gl.getUniformLocation(prog, 'u_harmonicRMS'),
+          percussiveOnset: gl.getUniformLocation(prog, 'u_percussiveOnset'),
+          healRate: gl.getUniformLocation(prog, 'u_healRate'),
+          damageAccumulator: gl.getUniformLocation(prog, 'u_damageAccumulator'),
+          topologyIntegrity: gl.getUniformLocation(prog, 'u_topologyIntegrity'),
+          mfccVel: gl.getUniformLocation(prog, 'u_mfccVel'),
+          mfccAccel: gl.getUniformLocation(prog, 'u_mfccAccel'),
+          tension: gl.getUniformLocation(prog, 'u_tension'),
+          tensionVel: gl.getUniformLocation(prog, 'u_tensionVel'),
+          state: gl.getUniformLocation(prog, 'u_state'),
+          bifurcationPhase: gl.getUniformLocation(prog, 'u_bifurcationPhase'),
+          ruleMask: gl.getUniformLocation(prog, 'u_ruleMask'),
+          integrity: gl.getUniformLocation(prog, 'u_integrity'),
+          stressRate: gl.getUniformLocation(prog, 'u_stressRate'),
+          failurePhase: gl.getUniformLocation(prog, 'u_failurePhase'),
+          debrisCount: gl.getUniformLocation(prog, 'u_debrisCount'),
+          metric: gl.getUniformLocation(prog, 'u_metric'),
+          curvature: gl.getUniformLocation(prog, 'u_curvature'),
+          coherence: gl.getUniformLocation(prog, 'u_coherence'),
+          amplitudes: gl.getUniformLocation(prog, 'u_amplitudes'),
+          suppression: gl.getUniformLocation(prog, 'u_suppression'),
+          toxicity: gl.getUniformLocation(prog, 'u_toxicity'),
+          oxygenation: gl.getUniformLocation(prog, 'u_oxygenation'),
+          reduction: gl.getUniformLocation(prog, 'u_reduction'),
+          anaerobicIntegrity: gl.getUniformLocation(prog, 'u_anaerobicIntegrity'),
+          hashTex: gl.getUniformLocation(prog, 'u_hashTex'),
+          turbulence: gl.getUniformLocation(prog, 'u_turbulence'),
+          voxelGrid: gl.getUniformLocation(prog, 'u_voxelGrid'),
+          mass: gl.getUniformLocation(prog, 'u_mass'),
+          schwarzschildRadius: gl.getUniformLocation(prog, 'u_schwarzschildRadius'),
+          horizonProximity: gl.getUniformLocation(prog, 'u_horizonProximity'),
+          valence: gl.getUniformLocation(prog, 'u_valence'),
+          arousal: gl.getUniformLocation(prog, 'u_arousal'),
+          detectedMood: gl.getUniformLocation(prog, 'u_detectedMood'),
+          torsion: gl.getUniformLocation(prog, 'u_torsion'),
+          phaseShift: gl.getUniformLocation(prog, 'u_phaseShift'),
+          symmetryOrder: gl.getUniformLocation(prog, 'u_symmetryOrder'),
+          viscosityRatio: gl.getUniformLocation(prog, 'u_viscosityRatio'),
+          injectionRate: gl.getUniformLocation(prog, 'u_injectionRate'),
+          fingerTex: gl.getUniformLocation(prog, 'u_fingerTex'),
+          pressureTex: gl.getUniformLocation(prog, 'u_pressureTex'),
+          catastropheParam: gl.getUniformLocation(prog, 'u_catastropheParam'),
+          umbrellaScale: gl.getUniformLocation(prog, 'u_umbrellaScale'),
+          pinchIntensity: gl.getUniformLocation(prog, 'u_pinchIntensity'),
+          shockPosition: gl.getUniformLocation(prog, 'u_shockPosition'),
+          shockTime: gl.getUniformLocation(prog, 'u_shockTime'),
+          shockStrength: gl.getUniformLocation(prog, 'u_shockStrength'),
+          densityInterface: gl.getUniformLocation(prog, 'u_densityInterface'),
+          gyroidScale: gl.getUniformLocation(prog, 'u_gyroidScale'),
+          gyroidThickness: gl.getUniformLocation(prog, 'u_gyroidThickness'),
+          vowelFormant: gl.getUniformLocation(prog, 'u_vowelFormant'),
+          decayFactor: gl.getUniformLocation(prog, 'u_decayFactor'),
+          hardCeiling: gl.getUniformLocation(prog, 'u_hardCeiling'),
+          hardFloor: gl.getUniformLocation(prog, 'u_hardFloor'),
+          cageCenter: gl.getUniformLocation(prog, 'u_cageCenter'),
+          cageRadius: gl.getUniformLocation(prog, 'u_cageRadius'),
+          cageType: gl.getUniformLocation(prog, 'u_cageType'),
+          cageSoftness: gl.getUniformLocation(prog, 'u_cageSoftness'),
+          audioSmooth: gl.getUniformLocation(prog, 'u_audioSmooth'),
+          attackRate: gl.getUniformLocation(prog, 'u_attackRate'),
+          decayRate: gl.getUniformLocation(prog, 'u_decayRate'),
+          noiseScale: gl.getUniformLocation(prog, 'u_noiseScale'),
+          timeScale: gl.getUniformLocation(prog, 'u_timeScale'),
+          audioOffset: gl.getUniformLocation(prog, 'u_audioOffset')
         };
       }
       
       const locs = (prog as any).locations;
-      const t = (Date.now() - startRef.current) / 1000;
+      const now = Date.now();
+      const t = (now - startRef.current) / 1000;
+      const dt = (now - lastTimeRef.current) / 1000;
+      lastTimeRef.current = now;
       const u = uniformsRef.current;
+      
+      let bass = 0.0;
+      let mid = 0.0;
+      let high = 0.0;
+      let volume = 0.0;
+      let beat = beatRef.current;
+      const env = envelopesRef.current;
+
+      if (analyserRef.current && dataArrayRef.current && waveArrayRef.current) {
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        analyserRef.current.getByteTimeDomainData(waveArrayRef.current);
+        
+        const data = dataArrayRef.current;
+        const wave = waveArrayRef.current;
+        const len = data.length;
+        const sampleRate = audioCtxRef.current?.sampleRate || 44100;
+        
+        let sum = 0;
+        let lowSum = 0, midSum = 0, highSum = 0;
+        let weightedSum = 0;
+        let logSum = 0;
+        
+        // Chroma calculation
+        const chroma = new Float32Array(12);
+        let harmonicSum = 0;
+        let harmonicWeightedSum = 0;
+
+        // MFCC Setup (Lazy Init)
+        if (!melFilterbankRef.current) {
+          const numFilters = 26;
+          const minFreq = 20;
+          const maxFreq = sampleRate / 2;
+          const hzToMel = (hz: number) => 2595 * Math.log10(1 + hz / 700);
+          const melToHz = (mel: number) => 700 * (Math.pow(10, mel / 2595) - 1);
+          
+          const melMin = hzToMel(minFreq);
+          const melMax = hzToMel(maxFreq);
+          const melPoints = new Float32Array(numFilters + 2);
+          for (let i = 0; i < numFilters + 2; i++) {
+            melPoints[i] = melToHz(melMin + (i * (melMax - melMin)) / (numFilters + 1));
+          }
+          
+          const binPoints = melPoints.map(hz => Math.floor(((len * 2) + 1) * hz / sampleRate));
+          const filters = Array.from({ length: numFilters }, (_, i) => {
+            const filter = new Float32Array(len);
+            for (let j = binPoints[i]; j < binPoints[i+1]; j++) {
+              filter[j] = (j - binPoints[i]) / (binPoints[i+1] - binPoints[i]);
+            }
+            for (let j = binPoints[i+1]; j < binPoints[i+2]; j++) {
+              filter[j] = (binPoints[i+2] - j) / (binPoints[i+2] - binPoints[i+1]);
+            }
+            return filter;
+          });
+          melFilterbankRef.current = filters;
+
+          // DCT Matrix (13 x 26)
+          const dct = Array.from({ length: 13 }, (_, i) => {
+            const row = new Float32Array(numFilters);
+            for (let j = 0; j < numFilters; j++) {
+              row[j] = Math.cos((Math.PI * i * (j + 0.5)) / numFilters);
+            }
+            return row;
+          });
+          dctMatrixRef.current = dct;
+        }
+        
+        const melEnergies = new Float32Array(26);
+        const sensitivity = u.u_audioSensitivity || 1.0;
+        for (let i = 0; i < len; i++) {
+          const val = Math.min(1.0, (data[i] / 255.0) * sensitivity);
+          sum += val;
+          if (i < len * 0.2) lowSum += val;
+          else if (i < len * 0.6) midSum += val;
+          else highSum += val;
+          
+          weightedSum += val * (i / len);
+          logSum += Math.log(Math.max(1e-6, val));
+
+          // Chroma mapping
+          const freq = (i * sampleRate) / (len * 2);
+          if (freq > 20 && freq < 5000) {
+            const midiNote = 12 * Math.log2(freq / 440) + 69;
+            const pitchClass = Math.round(midiNote) % 12;
+            if (pitchClass >= 0 && pitchClass < 12) {
+              chroma[pitchClass] += val;
+            }
+          }
+
+          // Harmonic energy
+          if (i > len * 0.1 && i < len * 0.5) {
+            harmonicSum += val;
+            harmonicWeightedSum += val * (i / len);
+          }
+
+          // Mel Filterbank
+          melFilterbankRef.current.forEach((filter: Float32Array, idx: number) => {
+            melEnergies[idx] += val * filter[i];
+          });
+        }
+        
+        volume = sum / len;
+        bass = lowSum / (len * 0.2);
+        mid = midSum / (len * 0.4);
+        high = highSum / (len * 0.4);
+
+        // MFCC Calculation
+        const mfcc = new Float32Array(13);
+        const logMelEnergies = melEnergies.map(e => Math.log(Math.max(1e-6, e)));
+        for (let i = 0; i < 13; i++) {
+          for (let j = 0; j < 26; j++) {
+            mfcc[i] += logMelEnergies[j] * dctMatrixRef.current[i][j];
+          }
+          mfcc[i] = Math.max(-1, Math.min(1, mfcc[i] / 10.0)); // Normalize roughly
+        }
+
+        // Update MFCC History
+        const history = mfccHistoryRef.current;
+        history.set(history.subarray(13), 0);
+        history.set(mfcc, history.length - 13);
+
+        // Normalize chroma
+        let maxChroma = 0;
+        let peakIndex = 0;
+        for (let i = 0; i < 12; i++) {
+          if (chroma[i] > maxChroma) {
+            maxChroma = chroma[i];
+            peakIndex = i;
+          }
+        }
+        if (maxChroma > 0) {
+          for (let i = 0; i < 12; i++) chroma[i] /= maxChroma;
+        }
+
+        // Spectral Centroid
+        const centroid = sum > 0 ? weightedSum / sum : 0;
+        
+        // Spectral Spread
+        let varianceSum = 0;
+        for (let i = 0; i < len; i++) {
+          const val = Math.min(1.0, (data[i] / 255.0) * sensitivity);
+          varianceSum += val * Math.pow((i / len) - centroid, 2);
+        }
+        const spread = sum > 0 ? Math.sqrt(varianceSum / sum) : 0;
+        
+        // Spectral Flatness
+        const geometricMean = Math.exp(logSum / len);
+        const arithmeticMean = sum / len;
+        const flatness = arithmeticMean > 0 ? geometricMean / arithmeticMean : 0;
+        
+        // Spectral Rolloff (85%)
+        let cumulativeSum = 0;
+        let rolloff = 0;
+        for (let i = 0; i < len; i++) {
+          cumulativeSum += Math.min(1.0, (data[i] / 255.0) * sensitivity);
+          if (cumulativeSum >= sum * 0.85) {
+            rolloff = i / len;
+            break;
+          }
+        }
+
+        // Spectral Flux
+        let flux = 0;
+        let percussiveFlux = 0;
+        if (lastSpectrumRef.current) {
+          for (let i = 0; i < len; i++) {
+            const diff = Math.min(1.0, (data[i] / 255.0) * sensitivity) - lastSpectrumRef.current[i];
+            const posDiff = Math.max(0, diff);
+            flux += posDiff;
+            if (i > len * 0.5) percussiveFlux += posDiff;
+          }
+          flux /= len;
+          percussiveFlux /= (len * 0.5);
+        }
+        if (!lastSpectrumRef.current) lastSpectrumRef.current = new Float32Array(len);
+        for (let i = 0; i < len; i++) lastSpectrumRef.current[i] = Math.min(1.0, (data[i] / 255.0) * sensitivity);
+
+        // Envelope Followers
+        const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+        
+        // Bass Attack/Decay
+        if (bass > env.bassAttack) env.bassAttack = lerp(env.bassAttack, bass, 0.6);
+        else env.bassAttack = lerp(env.bassAttack, bass, 0.1);
+        
+        if (bass > env.bassDecay) env.bassDecay = lerp(env.bassDecay, bass, 0.2);
+        else env.bassDecay = lerp(env.bassDecay, bass, 0.02);
+
+        // Smooth other descriptors
+        env.centroid = lerp(env.centroid, centroid, 0.1);
+        env.spread = lerp(env.spread, spread, 0.1);
+        env.flatness = lerp(env.flatness, flatness, 0.1);
+        env.rolloff = lerp(env.rolloff, rolloff, 0.1);
+        env.flux = lerp(env.flux, flux * 10.0, 0.2);
+        
+        // HPSS
+        env.harmonic = lerp(env.harmonic, harmonicSum / (len * 0.4), 0.1);
+        env.percussive = lerp(env.percussive, high * 2.0, 0.4);
+        env.harmonicCentroid = lerp(env.harmonicCentroid, harmonicSum > 0 ? harmonicWeightedSum / harmonicSum : 0, 0.1);
+        env.percussiveFlux = lerp(env.percussiveFlux, percussiveFlux * 20.0, 0.3);
+
+        // Chroma
+        for (let i = 0; i < 12; i++) {
+          env.chromaPrev[i] = env.chroma[i];
+          env.chroma[i] = lerp(env.chroma[i], chroma[i], 0.2);
+        }
+        env.chromaPeak = peakIndex;
+
+        // MFCC
+        for (let i = 0; i < 13; i++) {
+          env.mfccPrev[i] = env.mfcc[i];
+          env.mfcc[i] = lerp(env.mfcc[i], mfcc[i], 0.3);
+          
+          // Derivatives
+          env.mfccVelPrev[i] = env.mfccVel[i];
+          env.mfccVel[i] = env.mfcc[i] - env.mfccPrev[i];
+          env.mfccAccel[i] = env.mfccVel[i] - env.mfccVelPrev[i];
+        }
+
+        env.percussiveFlux = percussiveFlux;
+        env.bass = bass;
+        env.mid = mid;
+        env.beat = beat;
+
+        // Increment 11: Metabolism
+        env.harmonicRMS = env.harmonic;
+        env.percussiveOnset = percussiveFlux > 0.05 ? 1.0 : 0.0; // Simple trigger
+        if (env.percussiveFlux > 0.7) {
+            env.damageAccumulator += 0.3;
+        }
+        env.damageAccumulator *= (1.0 - env.healRate);
+        env.damageAccumulator = Math.max(0, Math.min(1, env.damageAccumulator));
+        env.topologyIntegrity = 1.0 - env.damageAccumulator;
+
+        // Increment 14: Bifurcation
+        const onsetDensity = env.percussiveFlux;
+        const spectralFlux = env.flux;
+        const loudnessTrend = volume;
+        const targetTension = onsetDensity * 0.4 + spectralFlux * 0.3 + loudnessTrend * 0.3;
+        const lastTension = env.tension;
+        env.tension = lerp(env.tension, targetTension, 0.1);
+        env.tensionVel = env.tension - lastTension;
+
+        if (env.tension > 0.8 && env.state === 0) {
+            env.state = 1; // Critical
+            env.bifurcationPhase = 0;
+        } else if (env.state === 1) {
+            env.bifurcationPhase += dt * 2.0;
+            if (env.bifurcationPhase >= 1.0) env.state = 2; // Chaotic
+        } else if (env.tension < 0.3 && env.state === 2) {
+            env.state = 0; // Stable
+        }
+
+        // Increment 15: Grammar Rule Mask
+        env.ruleMask[0] = env.harmonicRMS;
+        env.ruleMask[1] = env.percussive;
+        env.ruleMask[2] = env.percussiveFlux > 0.5 ? 1.0 : 0.0;
+        env.ruleMask[3] = env.flux * 0.5;
+        env.ruleMask[4] = env.centroid;
+        env.ruleMask[5] = env.bass * 0.3;
+        env.ruleMask[6] = env.beat;
+        env.ruleMask[7] = env.tension;
+
+        // Increment 16: Eschatological Tension
+        const stress = (env.percussiveFlux * 2.0 + env.flux) * 0.5;
+        env.stressRate = stress;
+        if (stress > 0.7) {
+            env.integrity -= stress * 0.05;
+        } else {
+            env.integrity += 0.01; // Healing
+        }
+        env.integrity = Math.max(0, Math.min(1, env.integrity));
+
+        if (env.integrity < 0.3 && env.state !== 3) {
+            env.state = 3; // COLLAPSE
+            env.failurePhase = 0;
+        }
+        
+        if (env.state === 3) {
+            env.failurePhase += dt * 0.5;
+            if (env.failurePhase >= 1.0) {
+                env.state = 0; // REFORMED
+                env.integrity = 0.6;
+            }
+        }
+
+        // Increment 18: Manifold (MFCC to Metric)
+        env.metric[0] = 1.0 + env.mfcc[0] * 0.5; // diag x
+        env.metric[1] = 1.0 + env.mfcc[1] * 0.5; // diag y
+        env.metric[2] = 1.0 + env.mfcc[2] * 0.5; // diag z
+        env.metric[3] = env.mfcc[3] * 0.2; // off-diag xy
+        env.metric[4] = env.mfcc[4] * 0.2; // off-diag yz
+        env.metric[5] = env.mfcc[5] * 0.2; // off-diag xz
+        env.curvature = env.mfcc[6] * 2.0;
+
+        // Increment 21: Quantum
+        env.coherence = 1.0 - env.flatness;
+        env.amplitudes[0] = env.chroma[0];
+        env.amplitudes[1] = env.chroma[4];
+        env.amplitudes[2] = env.chroma[7];
+        env.amplitudes[3] = volume;
+
+        // Increment 22: Starvation
+        env.suppression = Math.min(1, volume * 2.0 * (1.0 - env.flatness));
+
+        // Increment 23: Anaerobic Corrosion
+        env.oxygenation = high;
+        env.reduction = bass;
+        env.toxicity += env.oxygenation * 0.005;
+        env.toxicity *= 0.995; 
+        if (env.reduction > 0.8 && env.toxicity > 0.1) {
+            env.toxicity -= env.reduction * 0.02;
+            env.anaerobicIntegrity += 0.01;
+        }
+        env.anaerobicIntegrity = Math.max(0, Math.min(1, 1.0 - env.toxicity * 2.0));
+
+        // Increment 24: Cryptographic Navier-Stokes (Simple Hash)
+        env.turbulence = env.flux * 2.0;
+        let hashVal = 0;
+
+        // Increment 26: Schwarzschild
+        env.mass = env.bass * 2.0;
+        env.schwarzschildRadius = env.mass * 0.5;
+        env.horizonProximity = Math.max(0, 1.0 - env.schwarzschildRadius);
+
+        // Increment 28: Void-Mirror
+        env.valence = env.centroid;
+        env.arousal = env.flux;
+        // Simple mood detection: 0=Neutral, 1=Calm, 2=Aggressive, 3=Chaos
+        if (env.flux < 0.2 && volume < 0.2) env.detectedMood = 1;
+        else if (env.flux > 0.7 && volume > 0.7) env.detectedMood = 2;
+        else if (env.flatness > 0.8) env.detectedMood = 3;
+        else env.detectedMood = 0;
+
+        // Increment 27: Mutation
+        env.mutationRate = env.flux * 0.1;
+        if (env.flux > 0.9 && Math.random() < 0.01) {
+          // Trigger mutation
+          const chars = "0123456789ABCDEF";
+          const randomChar = chars[Math.floor(Math.random() * chars.length)];
+          mutationRef.current = originalFragRef.current.replace(/\/\/ MUTATION_POINT/g, `// MUTATED: ${randomChar}`);
+          recompile(mutationRef.current);
+        }
+        for (let i = 0; i < 16; i++) {
+            hashVal = ((hashVal << 5) - hashVal) + (data[i] || 0);
+            hashVal |= 0;
+        }
+        env.turbulence = (Math.abs(hashVal % 1000) / 1000.0) * volume * 5.0;
+
+        // Increment 26: Schwarzschild
+        env.mass = volume * 1.5 + (bass * 1.0);
+        env.schwarzschildRadius = env.mass * 0.4;
+        env.horizonProximity = Math.min(1.0, env.schwarzschildRadius / 1.5);
+
+        // Increment 28: Void-Mirror
+        env.valence = 1.0 - env.centroid;
+        env.arousal = 1.0 - env.flux;
+        if (env.bass > 0.7 && env.flux > 0.5) env.detectedMood = 2; // Aggressive
+        else if (env.bass < 0.3 && env.flux < 0.2) env.detectedMood = 3; // Calm
+        else if (env.mid > 0.6) env.detectedMood = 0; // Happy
+        else env.detectedMood = 1; // Sad
+
+        // Increment 29: Pentagonal Anholonomy
+        env.torsion = env.flux * 0.5;
+        env.phaseShift += env.torsion * dt * 2.0;
+        
+        // Increment 30: Saffman-Taylor
+        env.injectionRate = high * 2.0;
+        env.viscosityRatio = 10.0 + env.flatness * 990.0;
+
+        // Increment 31: Whitney Umbrella
+        env.catastropheParam = 0.5 - env.bass * 1.0;
+        env.pinchIntensity = env.bass > 0.8 ? 1.0 : 0.0;
+
+        // Increment 32: Richtmyer-Meshkov
+        if (env.percussiveFlux > 0.8) {
+          // Trigger shock
+          const idx = Math.floor(Math.random() * 8);
+          env.shockPositions[idx * 3] = (Math.random() * 2 - 1) * 2.0;
+          env.shockPositions[idx * 3 + 1] = (Math.random() * 2 - 1) * 2.0;
+          env.shockPositions[idx * 3 + 2] = (Math.random() * 2 - 1) * 2.0;
+          env.shockTimes[idx] = t;
+          env.shockStrengths[idx] = env.percussiveFlux;
+        }
+
+        // Increment 51: Synaptic Low-Pass
+        for (let i = 0; i < 16; i++) {
+            const target = Math.min(1.0, ((data[i] || 0) / 255.0) * sensitivity);
+            const current = env.audioSmooth[i];
+            const delta = target - current;
+            const rate = (delta > 0.0) ? u.u_attackRate : u.u_decayRate;
+            env.audioSmooth[i] = current + delta * rate;
+        }
+
+        // Increment 52: Fake Quantum
+        env.audioOffset[0] = env.audioSmooth[0] * 2.0;
+        env.audioOffset[1] = env.audioSmooth[4] * 2.0;
+        env.audioOffset[2] = env.audioSmooth[8] * 2.0;
+
+        // Increment 50: Bounding Volume Cage
+        env.cageCenter[0] = (mouse.x / canvas.width - 0.5) * 10.0;
+        env.cageCenter[1] = (1.0 - mouse.y / canvas.height - 0.5) * 10.0;
+        env.cageCenter[2] = Math.sin(t * 0.5) * 2.0;
+
+        // Increment 33: Gyroid
+        env.gyroidScale = 1.0 + env.vowelFormant * 5.0;
+        env.gyroidThickness = 0.05 + volume * 0.2;
+        env.vowelFormant = env.centroid;
+
+        // Beat detection
+        if (bass > lastBassRef.current + 0.15 && bass > 0.4) {
+          beat = 1.0;
+          env.lastBeatTime = now;
+        } else {
+          beat = Math.max(0, beat - dt / 0.2);
+        }
+        lastBassRef.current = bass;
+        beatRef.current = beat;
+
+        // Musical Time Phases
+        const bps = env.tempo / 60;
+        env.beatPhase = (t * bps) % 1.0;
+        env.barPhase = (t * bps / 4) % 1.0;
+        env.phrasePhase = (t * bps / 16) % 1.0;
+
+        // Update audio texture
+        if (!audioTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          audioTexRef.current = tex;
+        }
+
+        const texData = new Uint8Array(512 * 2);
+        for (let i = 0; i < 512; i++) {
+          texData[i] = Math.min(255, (data[i] || 0) * sensitivity);
+          const w = wave[i] || 128;
+          texData[512 + i] = Math.max(0, Math.min(255, 128 + (w - 128) * sensitivity));
+        }
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, audioTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 512, 2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, texData);
+        gl.uniform1i(locs.audioTex, 0);
+
+        // Update MFCC texture
+        if (!mfccTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          mfccTexRef.current = tex;
+        }
+        
+        // Convert Float32 MFCC history to Uint8 for texture
+        const mfccTexData = new Uint8Array(13 * 64);
+        for (let i = 0; i < history.length; i++) {
+          mfccTexData[i] = Math.floor((history[i] * 0.5 + 0.5) * 255);
+        }
+        
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, mfccTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 13, 64, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, mfccTexData);
+        gl.uniform1i(locs.mfccTex, 1);
+
+        // Update Feature History Texture (16 features x 64 frames)
+        if (!featureTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          featureTexRef.current = tex;
+        }
+
+        const features = new Float32Array([
+          bass, mid, high, volume, beat, env.flux, env.centroid, env.spread,
+          env.flatness, env.rolloff, env.harmonic, env.percussive, env.harmonicCentroid,
+          env.percussiveFlux, env.beatPhase, env.tempo / 200.0
+        ]);
+        const fHistory = featureHistoryRef.current;
+        fHistory.set(fHistory.subarray(16), 0);
+        fHistory.set(features, fHistory.length - 16);
+
+        const fTexData = new Uint8Array(16 * 64);
+        for (let i = 0; i < fHistory.length; i++) {
+          fTexData[i] = Math.floor(Math.max(0, Math.min(1, fHistory[i])) * 255);
+        }
+
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, featureTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 16, 64, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, fTexData);
+        gl.uniform1i(locs.featureTex, 2);
+
+        // Update Scar Texture (128 bins x 64 frames)
+        if (!scarTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          scarTexRef.current = tex;
+        }
+
+        const scarData = new Float32Array(128);
+        const transientStrength = env.percussiveFlux > 0.5 ? env.percussiveFlux : 0.1;
+        for (let i = 0; i < 128; i++) {
+          scarData[i] = Math.min(1.0, (data[i] / 255.0) * sensitivity) * transientStrength;
+        }
+        const sHistory = scarHistoryRef.current;
+        sHistory.set(sHistory.subarray(128), 0);
+        sHistory.set(scarData, sHistory.length - 128);
+
+        const sTexData = new Uint8Array(128 * 64);
+        for (let i = 0; i < sHistory.length; i++) {
+          sTexData[i] = Math.floor(Math.max(0, Math.min(1, sHistory[i])) * 255);
+        }
+
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, scarTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 128, 64, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, sTexData);
+        gl.uniform1i(locs.scarTex, 3);
+
+        // Update Grammar Texture (encoded operator tree)
+        if (!grammarTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          grammarTexRef.current = tex;
+          
+          // Encode some basic rules (Dummy for now)
+          const gData = new Uint8Array(16 * 16 * 4);
+          for(let i=0; i<16*16*4; i++) gData[i] = Math.random() * 255;
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 16, 16, 0, gl.RGBA, gl.UNSIGNED_BYTE, gData);
+        }
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, grammarTexRef.current);
+        gl.uniform1i(locs.grammarTex, 4);
+
+        // Update Hash Texture (Increment 24)
+        if (!hashTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+          hashTexRef.current = tex;
+        }
+        const hashData = new Uint8Array(64);
+        for(let i=0; i<64; i++) hashData[i] = Math.min(255, (data[i % data.length] * sensitivity)) ^ (i * 17);
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, hashTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 8, 8, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, hashData);
+        gl.uniform1i(locs.hashTex, 5);
+
+        // Update Voxel Grid (Increment 25) - 64x64 placeholder
+        if (!voxelGridTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+          voxelGridTexRef.current = tex;
+        }
+        const voxelData = new Uint8Array(64 * 64 * 4);
+        for(let i=0; i<64*64; i++) {
+          const noise = Math.random() * 255;
+          voxelData[i*4] = noise < (env.bass * 255) ? 255 : 0; // Alive
+          voxelData[i*4+1] = (i / 16) % 255; // Age
+          voxelData[i*4+2] = (i * 7) % 255; // Direction
+          voxelData[i*4+3] = env.mid * 255; // Nutrient
+        }
+        gl.activeTexture(gl.TEXTURE6);
+        gl.bindTexture(gl.TEXTURE_2D, voxelGridTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 64, 64, 0, gl.RGBA, gl.UNSIGNED_BYTE, voxelData);
+        gl.uniform1i(locs.voxelGrid, 6);
+
+        // Increment 30: Saffman-Taylor Textures
+        if (!fingerTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          fingerTexRef.current = tex;
+        }
+        const fingerData = new Uint8Array(64 * 64);
+        for(let i=0; i<64*64; i++) fingerData[i] = Math.random() < (env.injectionRate * 0.1) ? 255 : 0;
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, fingerTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 64, 64, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, fingerData);
+        gl.uniform1i(locs.fingerTex, 7);
+
+        if (!pressureTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          pressureTexRef.current = tex;
+        }
+        const pressureData = new Uint8Array(64 * 64);
+        for(let i=0; i<64*64; i++) pressureData[i] = Math.floor(env.viscosityRatio % 255);
+        gl.activeTexture(gl.TEXTURE8);
+        gl.bindTexture(gl.TEXTURE_2D, pressureTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 64, 64, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, pressureData);
+        gl.uniform1i(locs.pressureTex, 8);
+
+        // Increment 32: Density Interface Texture
+        if (!densityInterfaceTexRef.current) {
+          const tex = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          densityInterfaceTexRef.current = tex;
+        }
+        const densityData = new Uint8Array(64 * 64);
+        for(let i=0; i<64*64; i++) densityData[i] = (i % 64 < 32) ? 200 : 50;
+        gl.activeTexture(gl.TEXTURE9);
+        gl.bindTexture(gl.TEXTURE_2D, densityInterfaceTexRef.current);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 64, 64, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, densityData);
+        gl.uniform1i(locs.densityInterface, 9);
+
+        // Audio-Reactive Post-Process Mappings
+        env.bloomThreshold = 0.8 - volume * 0.6;
+        env.chromaticAberration = env.flux * 0.05;
+        if (beat > 0.8) {
+          env.feedbackGain = 0.0;
+        } else {
+          env.feedbackGain = 0.9 + env.harmonic * 0.09;
+        }
+        env.glitchAmount = high * env.percussive * 2.0;
+      }
       
       gl.uniform1f(locs.time, t);
       gl.uniform2f(locs.res, canvas.width, canvas.height);
@@ -1748,7 +3513,113 @@ export default function App() {
       gl.uniform1f(locs.visc, u.u_viscosity);
       gl.uniform1f(locs.sparkle, u.u_sparkle_sharpness);
       gl.uniform1f(locs.prism, u.u_prismatic);
+      gl.uniform1f(locs.bass, bass);
+      gl.uniform1f(locs.mid, mid);
+      gl.uniform1f(locs.high, high);
+      gl.uniform1f(locs.treble, high);
+      gl.uniform1f(locs.volume, volume);
+      gl.uniform1f(locs.beat, beat);
+      gl.uniform1f(locs.bassAttack, env.bassAttack);
+      gl.uniform1f(locs.bassDecay, env.bassDecay);
+      gl.uniform1f(locs.flux, env.flux);
+      gl.uniform1f(locs.centroid, env.centroid);
+      gl.uniform1f(locs.spread, env.spread);
+      gl.uniform1f(locs.flatness, env.flatness);
+      gl.uniform1f(locs.rolloff, env.rolloff);
+      gl.uniform1f(locs.harmonic, env.harmonic);
+      gl.uniform1f(locs.percussive, env.percussive);
+      gl.uniform1f(locs.harmonicCentroid, env.harmonicCentroid);
+      gl.uniform1f(locs.percussiveFlux, env.percussiveFlux);
+      gl.uniform1fv(locs.chroma, env.chroma);
+      gl.uniform1fv(locs.chromaPrev, env.chromaPrev);
+      gl.uniform1f(locs.chromaPeak, env.chromaPeak);
+      gl.uniform1fv(locs.mfcc, env.mfcc);
+      gl.uniform1fv(locs.mfccPrev, env.mfccPrev);
+      gl.uniform1f(locs.beatPhase, env.beatPhase);
+      gl.uniform1f(locs.barPhase, env.barPhase);
+      gl.uniform1f(locs.phrasePhase, env.phrasePhase);
+      gl.uniform1f(locs.tempo, env.tempo);
+
+      // Raymarching & Post-Process Uniforms
+      gl.uniform1f(locs.displaceAmp, u.u_displaceAmp);
+      gl.uniform1f(locs.twist, u.u_twist);
+      gl.uniform1f(locs.repetition, u.u_repetition);
+      gl.uniform1f(locs.bailout, u.u_bailout);
+      gl.uniform1f(locs.stepMod, u.u_stepMod);
+      gl.uniform1f(locs.feedbackGain, env.feedbackGain);
+      gl.uniform1f(locs.bloomThreshold, env.bloomThreshold);
+      gl.uniform1f(locs.chromaticAberration, env.chromaticAberration);
+      gl.uniform1f(locs.glitchAmount, env.glitchAmount);
       
+      // Increment 11-15 Uniforms
+      gl.uniform1f(locs.harmonicRMS, env.harmonicRMS);
+      gl.uniform1f(locs.percussiveOnset, env.percussiveOnset);
+      gl.uniform1f(locs.healRate, env.healRate);
+      gl.uniform1f(locs.damageAccumulator, env.damageAccumulator);
+      gl.uniform1f(locs.topologyIntegrity, env.topologyIntegrity);
+      gl.uniform1fv(locs.mfccVel, env.mfccVel);
+      gl.uniform1fv(locs.mfccAccel, env.mfccAccel);
+      gl.uniform1f(locs.tension, env.tension);
+      gl.uniform1f(locs.tensionVel, env.tensionVel);
+      gl.uniform1f(locs.state, env.state);
+      gl.uniform1f(locs.bifurcationPhase, env.bifurcationPhase);
+      gl.uniform1fv(locs.ruleMask, env.ruleMask);
+      
+      // Increment 16-22 Uniforms
+      gl.uniform1f(locs.integrity, env.integrity);
+      gl.uniform1f(locs.stressRate, env.stressRate);
+      gl.uniform1f(locs.failurePhase, env.failurePhase);
+      gl.uniform1f(locs.debrisCount, env.debrisCount);
+      gl.uniform1fv(locs.metric, env.metric);
+      gl.uniform1f(locs.curvature, env.curvature);
+      gl.uniform1f(locs.coherence, env.coherence);
+      gl.uniform1fv(locs.amplitudes, env.amplitudes);
+      gl.uniform1f(locs.suppression, env.suppression);
+      
+      // Increment 23-28 Uniforms
+      gl.uniform1f(locs.toxicity, env.toxicity);
+      gl.uniform1f(locs.oxygenation, env.oxygenation);
+      gl.uniform1f(locs.reduction, env.reduction);
+      gl.uniform1f(locs.anaerobicIntegrity, env.anaerobicIntegrity);
+      gl.uniform1f(locs.turbulence, env.turbulence);
+      gl.uniform1f(locs.mass, env.mass);
+      gl.uniform1f(locs.schwarzschildRadius, env.schwarzschildRadius);
+      gl.uniform1f(locs.horizonProximity, env.horizonProximity);
+      gl.uniform1f(locs.valence, env.valence);
+      gl.uniform1f(locs.arousal, env.arousal);
+      gl.uniform1f(locs.detectedMood, env.detectedMood);
+      
+      // Increment 29-33 Uniforms
+      gl.uniform1f(locs.torsion, env.torsion);
+      gl.uniform1f(locs.phaseShift, env.phaseShift);
+      gl.uniform1f(locs.symmetryOrder, env.symmetryOrder);
+      gl.uniform1f(locs.viscosityRatio, env.viscosityRatio);
+      gl.uniform1f(locs.injectionRate, env.injectionRate);
+      gl.uniform1f(locs.catastropheParam, env.catastropheParam);
+      gl.uniform1f(locs.umbrellaScale, env.umbrellaScale);
+      gl.uniform1f(locs.pinchIntensity, env.pinchIntensity);
+      gl.uniform3fv(locs.shockPosition, env.shockPositions);
+      gl.uniform1fv(locs.shockTime, env.shockTimes);
+      gl.uniform1fv(locs.shockStrength, env.shockStrengths);
+      gl.uniform1f(locs.gyroidScale, env.gyroidScale);
+      gl.uniform1f(locs.gyroidThickness, env.gyroidThickness);
+      gl.uniform1f(locs.vowelFormant, env.vowelFormant);
+
+      // Increment 49-52 Uniforms
+      gl.uniform1f(locs.decayFactor, u.u_decayFactor);
+      gl.uniform1f(locs.hardCeiling, u.u_hardCeiling);
+      gl.uniform1f(locs.hardFloor, u.u_hardFloor);
+      gl.uniform3fv(locs.cageCenter, env.cageCenter);
+      gl.uniform1f(locs.cageRadius, u.u_cageRadius);
+      gl.uniform1f(locs.cageType, u.u_cageType);
+      gl.uniform1f(locs.cageSoftness, u.u_cageSoftness);
+      gl.uniform1fv(locs.audioSmooth, env.audioSmooth);
+      gl.uniform1f(locs.attackRate, u.u_attackRate);
+      gl.uniform1f(locs.decayRate, u.u_decayRate);
+      gl.uniform1f(locs.noiseScale, u.u_noiseScale);
+      gl.uniform1f(locs.timeScale, u.u_timeScale);
+      gl.uniform3fv(locs.audioOffset, env.audioOffset);
+
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       
@@ -1948,11 +3819,25 @@ export default function App() {
               
               // Robust text extraction
               try {
-                if (chunk.text) {
-                  fullText += chunk.text;
+                let chunkText = "";
+                try {
+                  if (chunk.text) chunkText = chunk.text;
+                } catch (e) {
+                  // chunk.text getter might throw if there is no text part
+                }
+                
+                if (chunkText) {
+                  fullText += chunkText;
                 } else if (chunk.candidates?.[0]?.content?.parts) {
                   for (const part of chunk.candidates[0].content.parts) {
                     if (part.text) fullText += part.text;
+                    // Also check for executableCode or codeExecutionResult if the model is using code execution
+                    if ((part as any).executableCode?.code) {
+                      fullText += "\n```python\n" + (part as any).executableCode.code + "\n```\n";
+                    }
+                    if ((part as any).codeExecutionResult?.output) {
+                      fullText += "\n```\n" + (part as any).codeExecutionResult.output + "\n```\n";
+                    }
                   }
                 }
 
@@ -2364,10 +4249,13 @@ CURRENT MEMORY STATE:\n${memoryContext}`
       }
       
       // Final nudge if empty after all rounds
-      if (!response.text && (!response.functionCalls || response.functionCalls.length === 0)) {
+      if (!response.text) {
         console.warn("[ShaderForge] Oracle returned empty response, nudging...");
         setThinkingStatus("Nudging the Oracle...");
-        response = await safeSendMessage(chat, { message: "(The Oracle was silent. Please provide your response now, ensuring it follows the JSON format if you are forging a shader.)" });
+        const nudgeMsg = (response.functionCalls && response.functionCalls.length > 0)
+          ? "(You cannot call any more functions. Please provide your final response now, ensuring it follows the JSON format if you are forging a shader.)"
+          : "(The Oracle was silent. Please provide your response now, ensuring it follows the JSON format if you are forging a shader.)";
+        response = await safeSendMessage(chat, { message: nudgeMsg });
       }
 
       setThinkingStatus("Forging response...");
@@ -2435,12 +4323,14 @@ CURRENT MEMORY STATE:\n${memoryContext}`
         console.log("[ShaderForge] JSON parsing failed or incomplete, attempting robust regex extraction");
         
         // 1. Try to find GLSL code blocks first (most reliable)
-        const glslBlockMatch = text.match(/```(?:glsl|cpp|c|hlsl)?\s*([\s\S]*?)```/i);
-        const glslPropertyMatch = text.match(/"glsl"\s*:\s*"([\s\S]*?)"/i);
+        // Allow missing closing backticks if truncated
+        const glslBlockMatch = text.match(/```(?:glsl|cpp|c|hlsl)?\s*([\s\S]*?)(?:```|$)/i);
+        // Allow missing closing quote if truncated
+        const glslPropertyMatch = text.match(/"glsl"\s*:\s*"([\s\S]*?)(?:"\s*}|"$|$)/i);
         
         // 2. Try to find vibe and message
-        const vibeMatch = text.match(/"vibe"\s*:\s*"([\s\S]*?)"/i);
-        const messageMatch = text.match(/"message"\s*:\s*"([\s\S]*?)"/i);
+        const vibeMatch = text.match(/"vibe"\s*:\s*"([\s\S]*?)(?:"|$)/i);
+        const messageMatch = text.match(/"message"\s*:\s*"([\s\S]*?)(?:"|$)/i);
 
         const extractedCode = glslBlockMatch ? glslBlockMatch[1] : (glslPropertyMatch ? glslPropertyMatch[1] : null);
 
@@ -2481,7 +4371,7 @@ CURRENT MEMORY STATE:\n${memoryContext}`
         if (cleanText) {
           setMessages(m => [...m, { role: 'assistant', content: cleanText }]);
         } else {
-          throw new Error("The Oracle is silent. This can happen if the request is too vague, if safety filters were triggered, or if the math-energies dissipated. Try rephrasing or using a different spell.");
+          setMessages(m => [...m, { role: 'assistant', content: "_The Oracle is silent. This can happen if the request is too vague, if safety filters were triggered, or if the math-energies dissipated. Try rephrasing or using a different spell._" }]);
         }
       } catch (e) {
         console.error("[ShaderForge] Final parsing error", e);
@@ -2659,8 +4549,15 @@ CURRENT MEMORY STATE:\n${memoryContext}`
             <Star className="w-5 h-5 text-amber-400 group-hover:fill-amber-400 transition-all" />
           </button>
           <button 
+            onClick={toggleMic}
+            className={`p-3 rounded-xl backdrop-blur-md border transition-all shadow-xl pointer-events-auto ${isMicActive ? 'bg-biolume/20 border-biolume/50' : 'bg-black/40 border-white/10 hover:bg-white/10'}`}
+            title="Toggle Sound Reactivity"
+          >
+            {isMicActive ? <Mic className="w-5 h-5 text-biolume animate-pulse" /> : <MicOff className="w-5 h-5 text-zinc-500" />}
+          </button>
+          <button 
             onClick={() => setIsMuted(!isMuted)}
-            className="p-3 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all shadow-xl"
+            className="p-3 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all shadow-xl pointer-events-auto"
           >
             {isMuted ? <VolumeX className="w-5 h-5 text-zinc-500" /> : <Volume2 className="w-5 h-5 text-fuchsia-400" />}
           </button>
@@ -3645,6 +5542,12 @@ CURRENT MEMORY STATE:\n${memoryContext}`
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar pb-12">
+                  <UniformSlider 
+                    label="Audio Sensitivity" 
+                    value={uniforms.u_audioSensitivity} 
+                    min={0.1} max={100.0} step={0.1}
+                    onChange={(v) => setUniforms(u => ({ ...u, u_audioSensitivity: v }))}
+                  />
                   <UniformSlider 
                     label="Chromatic Ab" 
                     value={uniforms.u_chromatic_ab} 
