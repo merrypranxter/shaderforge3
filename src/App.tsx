@@ -41,6 +41,8 @@ import {
 import Markdown from "react-markdown";
 import { motion, AnimatePresence } from "motion/react";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
+import { StylePackPanel } from "./components/StylePackPanel";
+import type { AppliedPackState } from "./components/StylePackPanel";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Message {
@@ -2148,6 +2150,7 @@ export default function App() {
   const [githubRepo, setGithubRepo] = useState('');
   const [githubFiles, setGithubFiles] = useState<any[]>([]);
   const [notebookContext, setNotebookContext] = useState('');
+  const [appliedStylePack, setAppliedStylePack] = useState<AppliedPackState | null>(null);
   const [memory, setMemory] = useState<Memory>(() => {
     const saved = localStorage.getItem('shader_witch_memory');
     if (saved) return JSON.parse(saved);
@@ -5285,6 +5288,11 @@ CURRENT MEMORY STATE:\n${memoryContext}`
                       </button>
                     </div>
                   </section>
+
+                  {/* Style Pack */}
+                  <StylePackPanel
+                    onApply={(state) => setAppliedStylePack(state)}
+                  />
 
                   {/* GitHub */}
                   <section className="space-y-4">
