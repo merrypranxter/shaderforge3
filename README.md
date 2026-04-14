@@ -1,78 +1,104 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+<img width="1200" height="475" alt="ShaderForge Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
+# ⚡ ShaderForge 3
+
+**Describe a vibe. Get a live GLSL shader. Reload, remix, record.**
+
+*A Gemini-powered shader generator personalized to your own tastes and aesthetics.*
+
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript)](https://typescriptlang.org)
+[![Gemini](https://img.shields.io/badge/Gemini-AI-4285F4?style=flat-square&logo=google)](https://ai.google.dev)
+
 </div>
 
-# Run and deploy your AI Studio app
+---
 
-This contains everything you need to run your app locally.
+## What It Does
 
-View your app in AI Studio: https://ai.studio/apps/67bc0e6f-9898-4bf8-9942-8ea3638389e9
+ShaderForge 3 is a personal shader art tool. Type a vibe — "coral reef dissolving into static", "hyperbolic tiling that breathes", "Lorenz attractor in acid rain" — and Gemini generates live GLSL fragment shader code that runs instantly in the browser.
 
-## Run Locally
+It's opinionated: it's built for *your* aesthetics, not generic presets. The Style Pack system lets you load custom palettes and shader knob ranges from any GitHub repo, bending the outputs toward your visual language.
 
-**Prerequisites:**  Node.js
+---
 
+## Features
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- **Vibe → Shader** — Gemini generates GLSL from natural language prompts
+- **Live canvas** — shader runs immediately, no compile step
+- **Chat refinement** — keep iterating with a conversation thread
+- **Shader history** — every generation saved locally, reload any past sketch
+- **Style Packs** — load custom palettes + knob ranges from GitHub repos
+- **Seeded chaos mixer** — Re-roll knobs deterministically with xorshift32 PRNG
+- **Export** — screenshot (PNG) and screen record (WebM)
+- **Voice input** — speak your prompt
+- **Resizable panels** — code / canvas split layout
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/merrypranxter/shaderforge3.git
+cd shaderforge3
+npm install
+```
+
+Create `.env.local`:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+```bash
+npm run dev
+```
 
 ---
 
 ## Style Packs
 
-ShaderForge supports loading **Style Packs** from public GitHub repositories. A style pack is a JSON manifest file that defines palettes and shader knob ranges, letting you bring your visual aesthetic into the shader engine without touching any renderer code.
+Style Packs let you define custom palettes and shader knob ranges in a GitHub repo and load them into ShaderForge. The generator uses them to bias outputs toward your aesthetic.
 
-### Loading a Style Pack
-
-In the **Tools** panel (⚡ icon), find the **Style Pack** section. Enter the `owner` and `repo` of a GitHub repository that contains a `shaderforge.style.json` at its root, then click **Load Style Pack**.
-
-- Once loaded, select a palette and click **Apply** to register the pack's data.
-- Click **Re-roll** to randomize knob values within their defined ranges using a new deterministic seed.
-- The last successfully applied pack is saved in `localStorage` and restored on page refresh.
-- If anything goes wrong during apply, the app automatically reverts to the last known good pack.
-
-### Creating a Style Pack Repo
-
-Add a file named `shaderforge.style.json` at the **root** of a public GitHub repository. The schema is v1:
+Drop a `shaderforge.style.json` at the root of any public GitHub repo:
 
 ```json
 {
   "schemaVersion": 1,
-  "id": "my-style-pack",
-  "name": "My Style Pack",
-  "description": "Optional description of the vibe.",
+  "id": "my-style",
+  "name": "My Style",
   "palettes": [
     {
-      "id": "candy-groove",
-      "name": "Candy Groove",
-      "colors": ["#ff2bd6", "#ff8a00", "#ffe600", "#00ffd1", "#6a00ff"]
+      "id": "void-candy",
+      "name": "Void Candy",
+      "colors": ["#ff2bd6", "#6a00ff", "#00ffd1", "#ffe600", "#ff0055"]
     }
   ],
   "knobs": [
-    { "id": "warp",  "label": "Warp",  "min": 0.0, "max": 2.0, "default": 0.6 },
-    { "id": "grain", "label": "Grain", "min": 0.0, "max": 1.0, "default": 0.15 }
+    { "id": "warp",    "label": "Warp",    "min": 0.0, "max": 3.0, "default": 1.2 },
+    { "id": "grain",   "label": "Grain",   "min": 0.0, "max": 1.0, "default": 0.2 },
+    { "id": "speed",   "label": "Speed",   "min": 0.1, "max": 5.0, "default": 1.0 }
   ]
 }
 ```
 
-#### Schema rules
+In the app: **Tools panel (⚡) → Style Pack → enter `owner/repo` → Load → Apply.**
 
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `schemaVersion` | `1` | ✅ | Must be exactly `1` |
-| `id` | `string` | ✅ | Unique identifier, non-empty |
-| `name` | `string` | ✅ | Display name |
-| `description` | `string` | — | Optional free text |
-| `palettes` | `array` | — | Each palette has `id`, optional `name`, and `colors` |
-| `knobs` | `array` | — | Each knob has `id`, optional `label`, `min`, `max`, `default` |
+The **Re-roll** button re-randomizes all knob values from the same seed for reproducible experiments.
 
-- **Palette colors** must be valid hex strings: `#RRGGBB` or `#RRGGBBAA` (case-insensitive).
-- **Knobs** must satisfy `min ≤ default ≤ max`.
+---
 
-#### Seeded Chaos Mixer
+## Part of the Ecosystem
 
-The **Re-roll** button generates a new seed and re-randomizes all knob values within `[min, max]` using a deterministic xorshift32 PRNG. The same seed always produces the same values — great for reproducible experiments.
+ShaderForge 3 is one node in a larger generative art pipeline:
 
+- **[RepoScripter2](https://github.com/merrypranxter/reposcripter2)** — uses your GitHub repos as AI context for art generation
+- **[THE-LISTS](https://github.com/merrypranxter/THE-LISTS)** — mathematical taxonomy for visual chaos
+- **[Mathgasm](https://github.com/merrypranxter/Mathgasm)** — provider-agnostic AI art pipeline
+- Style repos (`merry-style`, `glitchcore_style`, etc.) — load as Style Packs
+
+---
+
+<div align="center">
+<sub>type weird things. run weird shaders. that's the whole app.</sub>
+</div>

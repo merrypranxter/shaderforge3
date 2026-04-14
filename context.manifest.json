@@ -1,0 +1,11 @@
+{
+  "description": "ShaderForge 3 \u2014 Gemini-powered GLSL shader generator with Style Pack system for personalized aesthetic control",
+  "files": [
+    "README.md",
+    "src/App.tsx",
+    "src/components/StylePackPanel.tsx",
+    "src/lib/chaosMixer.ts",
+    "src/lib/stylePackSchema.ts",
+    "src/lib/stylePackStorage.ts"
+  ]
+}
